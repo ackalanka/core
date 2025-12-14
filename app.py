@@ -1,6 +1,13 @@
+"""
+CardioVoice Backend API
+=======================
+Flask application with authentication, rate limiting, and security headers.
+"""
 import os
+import json
+import uuid
 import logging
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, g
 from pydantic import ValidationError
 
 # Load dotenv for local development convenience
@@ -10,20 +17,23 @@ load_dotenv()
 # CORS
 from flask_cors import CORS
 
+# Rate limiting
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 # Swagger UI
 from flask_swagger_ui import get_swaggerui_blueprint
 
 # Local imports
-from schemas import ProfileModel
-from services import KnowledgeBaseService, MockMLService, CardioChatService
+from config import settings
+from schemas import ProfileModel, UserRegisterModel, UserLoginModel
+from services import KnowledgeBaseService, MockMLService, CardioChatService, auth_service
+from middleware import require_auth, get_current_user, add_security_headers
 from utils import save_upload_securely
 
 # --------------------------
-# CONFIG & LOGGING
+# LOGGING CONFIGURATION
 # --------------------------
-
-UPLOAD_FOLDER = 'temp_uploads'
-GIGACHAT_KEY = os.getenv("GIGACHAT_AUTH_KEY")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,10 +41,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import json
-import time
 
 class JsonFormatter(logging.Formatter):
+    """JSON formatter for structured logging."""
     def format(self, record):
         log_record = {
             "timestamp": self.formatTime(record),
@@ -42,11 +51,11 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         try:
-            from flask import g
             log_record["request_id"] = getattr(g, "request_id", None)
         except Exception:
             log_record["request_id"] = None
         return json.dumps(log_record)
+
 
 # Replace root logger handlers with JSON formatter
 handler = logging.StreamHandler()
@@ -58,67 +67,91 @@ logging.getLogger().setLevel(logging.INFO)
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 # --------------------------
-# FLASK APP INIT
+# FLASK APP INITIALIZATION
 # --------------------------
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-import uuid
-from flask import g
+# Configuration from centralized config
+app.config['UPLOAD_FOLDER'] = 'temp_uploads'
+app.config['SECRET_KEY'] = settings.secret_key
+app.config['MAX_CONTENT_LENGTH'] = settings.max_upload_size_bytes  # Request size limit
+
+# --------------------------
+# SECURITY HEADERS
+# --------------------------
+
+add_security_headers(app)
+
+# --------------------------
+# RATE LIMITING
+# --------------------------
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[f"{settings.rate_limit_per_minute} per minute"],
+    storage_uri="memory://",
+    strategy="fixed-window"
+)
+
+
+# Custom rate limit error handler
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "status": "error",
+        "message": "Rate limit exceeded. Please slow down.",
+        "code": "RATE_LIMIT_EXCEEDED"
+    }), 429
+
+
+# --------------------------
+# REQUEST ID MIDDLEWARE
+# --------------------------
 
 @app.before_request
 def attach_request_id():
+    """Attach a unique request ID for tracing."""
     rid = request.headers.get("X-Request-Id") or str(uuid.uuid4())
     g.request_id = rid
     logger.info(f"[request_id={rid}] {request.method} {request.path} started")
 
+
 @app.after_request
 def add_request_id_header(response):
+    """Add request ID to response headers."""
     rid = getattr(g, "request_id", None)
     if rid:
         response.headers["X-Request-Id"] = rid
     return response
 
+
 # --------------------------
-# CORS configuration (safe dev + production)
+# CORS CONFIGURATION
 # --------------------------
-# Requires: pip install flask-cors python-dotenv
 
-FLASK_ENV = os.getenv("FLASK_ENV", "production").lower()
-raw_allowed = os.getenv("ALLOWED_ORIGINS", "")
+allowed_origins = settings.allowed_origins_list
 
-def make_allowed_origins(raw: str, env: str):
-    raw = (raw or "").strip()
-    if env == "development":
-        # default local development origins if none provided
-        default_local = ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:3000"]
-        if not raw:
-            return default_local
-    # parse comma separated list into cleaned entries
-    origins = [o.strip() for o in raw.split(",") if o.strip()]
-    return origins
-
-allowed_origins = make_allowed_origins(raw_allowed, FLASK_ENV)
-
-# Safety checks:
-# - In production, ALLOWED_ORIGINS must be explicitly set and must not be '*'
-if FLASK_ENV != "development":
+# Safety checks for production
+if settings.is_production:
     if not allowed_origins:
         raise RuntimeError("ALLOWED_ORIGINS is not set. In production you must set ALLOWED_ORIGINS env var.")
     if any(o == "*" for o in allowed_origins):
         raise RuntimeError("Using '*' for ALLOWED_ORIGINS in production is forbidden for security reasons.")
 
-supports_credentials = os.getenv("CORS_CREDENTIALS", "false").lower() in ("1", "true", "yes")
+# In development, add default local origins
+if settings.is_development and not allowed_origins:
+    allowed_origins = ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:3000"]
 
 # Register CORS for API routes only (scoped)
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=supports_credentials)
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=settings.cors_credentials)
 
 # --------------------------
-# Determine GigaChat mode & INIT SERVICES
+# INITIALIZE SERVICES
 # --------------------------
 
-MOCK_GIGACHAT_MODE = not bool(GIGACHAT_KEY)
+MOCK_GIGACHAT_MODE = not bool(settings.gigachat_auth_key)
 if MOCK_GIGACHAT_MODE:
     logger.warning("⚠️ Running in MOCK GigaChat mode (no auth key).")
 else:
@@ -126,19 +159,20 @@ else:
 
 kb_service = KnowledgeBaseService()
 ml_service = MockMLService()
-chat_service = CardioChatService(GIGACHAT_KEY)
+chat_service = CardioChatService(settings.gigachat_auth_key)
 
 # =====================================================
 #  SWAGGER UI  /docs
 # =====================================================
 
-# Serve openapi.yaml from static/ to ensure Swagger can fetch it
 @app.route('/openapi.yaml')
 def serve_openapi():
+    """Serve OpenAPI specification."""
     return send_from_directory(app.static_folder, 'openapi.yaml', mimetype='text/yaml')
 
+
 SWAGGER_URL = '/docs'
-API_URL = '/openapi.yaml'  # points to the route above
+API_URL = '/openapi.yaml'
 
 swaggerui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
@@ -147,21 +181,185 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
-# Debug route to list all registered routes
-@app.route('/__routes__', methods=['GET'])
-def show_routes():
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({"endpoint": rule.endpoint, "rule": str(rule)})
-    return jsonify(routes)
+
+# Debug route to list all registered routes (development only)
+if settings.is_development:
+    @app.route('/__routes__', methods=['GET'])
+    def show_routes():
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({"endpoint": rule.endpoint, "rule": str(rule)})
+        return jsonify(routes)
+
 
 # =====================================================
-#  ROUTES
+#  AUTHENTICATION ROUTES
+# =====================================================
+
+@app.route('/api/v1/auth/register', methods=['POST'])
+@limiter.limit("5 per minute")  # Prevent registration spam
+def register():
+    """
+    Register a new user.
+    
+    Returns JWT token on successful registration.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required",
+                "code": "INVALID_REQUEST"
+            }), 400
+        
+        # Validate input
+        user_data = UserRegisterModel(**data)
+        
+        # Register user
+        success, message, user = auth_service.register_user(
+            email=user_data.email,
+            password=user_data.password
+        )
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "message": message,
+                "code": "REGISTRATION_FAILED"
+            }), 400
+        
+        # Generate token for immediate login
+        token = auth_service.create_access_token(user["id"], user["email"])
+        
+        logger.info(f"New user registered: {user['email']}")
+        
+        return jsonify({
+            "status": "success",
+            "message": "Registration successful",
+            "data": {
+                "user": user,
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": settings.jwt_expiration_hours * 3600
+            }
+        }), 201
+        
+    except ValidationError as ve:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid input data",
+            "errors": ve.errors(),
+            "code": "VALIDATION_ERROR"
+        }), 400
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Registration failed",
+            "code": "INTERNAL_ERROR"
+        }), 500
+
+
+@app.route('/api/v1/auth/login', methods=['POST'])
+@limiter.limit("5 per minute")  # Brute force protection
+def login():
+    """
+    Authenticate user and return JWT token.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required",
+                "code": "INVALID_REQUEST"
+            }), 400
+        
+        # Validate input
+        login_data = UserLoginModel(**data)
+        
+        # Authenticate
+        success, message, token = auth_service.authenticate(
+            email=login_data.email,
+            password=login_data.password
+        )
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "message": message,
+                "code": "AUTH_FAILED"
+            }), 401
+        
+        return jsonify({
+            "status": "success",
+            "message": "Login successful",
+            "data": {
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": settings.jwt_expiration_hours * 3600
+            }
+        })
+        
+    except ValidationError as ve:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid input data",
+            "errors": ve.errors(),
+            "code": "VALIDATION_ERROR"
+        }), 400
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Login failed",
+            "code": "INTERNAL_ERROR"
+        }), 500
+
+
+@app.route('/api/v1/auth/me', methods=['GET'])
+@require_auth
+def get_me():
+    """
+    Get current authenticated user info.
+    Requires valid JWT token.
+    """
+    user = get_current_user()
+    user_data = auth_service.get_user_by_id(user["user_id"])
+    
+    if not user_data:
+        return jsonify({
+            "status": "error",
+            "message": "User not found",
+            "code": "USER_NOT_FOUND"
+        }), 404
+    
+    return jsonify({
+        "status": "success",
+        "data": user_data
+    })
+
+
+# =====================================================
+#  MAIN ANALYSIS ROUTE (PROTECTED)
 # =====================================================
 
 @app.route('/api/v1/analyze', methods=['POST'])
+@require_auth  # Now requires authentication
+@limiter.limit("10 per minute")  # Heavy endpoint, stricter limit
 def analyze():
+    """
+    Analyze voice recording and user profile.
+    
+    Requires authentication via JWT token.
+    Returns risk scores and AI-generated explanation.
+    """
     logger.info("📥 New /analyze request received")
+    
+    # Get authenticated user
+    current_user = get_current_user()
+    logger.info(f"Analysis requested by user: {current_user['email']}")
 
     file_path = None
 
@@ -169,20 +367,29 @@ def analyze():
     try:
         form = request.form.to_dict()
         profile = ProfileModel(**form)
-        user_profile = profile.dict()
+        user_profile = profile.model_dump()
     except ValidationError as ve:
         return jsonify({
             "status": "error",
             "message": "Invalid profile data",
-            "errors": ve.errors()
+            "errors": ve.errors(),
+            "code": "VALIDATION_ERROR"
         }), 400
     except Exception as e:
         logger.error(f"Unexpected profile validation error: {e}")
-        return jsonify({"status": "error", "message": "Invalid input format."}), 400
+        return jsonify({
+            "status": "error", 
+            "message": "Invalid input format.",
+            "code": "INVALID_FORMAT"
+        }), 400
 
     # ----------- 2. Validate & Save Audio File -----------
     if 'audio' not in request.files:
-        return jsonify({"status": "error", "message": "Audio file missing"}), 400
+        return jsonify({
+            "status": "error", 
+            "message": "Audio file missing",
+            "code": "AUDIO_MISSING"
+        }), 400
 
     try:
         file_path = save_upload_securely(
@@ -190,10 +397,18 @@ def analyze():
             app.config['UPLOAD_FOLDER']
         )
     except ValueError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({
+            "status": "error", 
+            "message": str(e),
+            "code": "FILE_VALIDATION_ERROR"
+        }), 400
     except Exception as e:
         logger.error(f"File saving failed: {e}")
-        return jsonify({"status": "error", "message": "File upload failed"}), 500
+        return jsonify({
+            "status": "error", 
+            "message": "File upload failed",
+            "code": "UPLOAD_FAILED"
+        }), 500
 
     # ----------- 3. MAIN PIPELINE -----------
     try:
@@ -236,19 +451,64 @@ def analyze():
             except Exception:
                 pass
 
-        return jsonify({"status": "error", "message": "Internal Server Error"}), 500
+        return jsonify({
+            "status": "error", 
+            "message": "Internal Server Error",
+            "code": "INTERNAL_ERROR"
+        }), 500
 
 
 # =====================================================
-#  HEALTH
+#  HEALTH CHECK
 # =====================================================
 
 @app.route('/health', methods=['GET'])
+@limiter.exempt  # Don't rate limit health checks
 def health():
+    """
+    Health check endpoint.
+    Returns service status and mode (mock/real).
+    """
     return jsonify({
         "status": "ok",
-        "mode": "mock" if MOCK_GIGACHAT_MODE else "real"
+        "mode": "mock" if MOCK_GIGACHAT_MODE else "real",
+        "version": "1.0.0"
     })
+
+
+# =====================================================
+#  ERROR HANDLERS
+# =====================================================
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Handle file too large errors."""
+    return jsonify({
+        "status": "error",
+        "message": f"Request too large. Maximum size is {settings.max_upload_size_mb}MB",
+        "code": "REQUEST_TOO_LARGE"
+    }), 413
+
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors."""
+    return jsonify({
+        "status": "error",
+        "message": "Resource not found",
+        "code": "NOT_FOUND"
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors."""
+    logger.error(f"Internal server error: {error}")
+    return jsonify({
+        "status": "error",
+        "message": "Internal server error",
+        "code": "INTERNAL_ERROR"
+    }), 500
 
 
 # =====================================================
@@ -256,8 +516,13 @@ def health():
 # =====================================================
 
 if __name__ == '__main__':
+    logger.info(f"🚀 Starting CardioVoice Backend in {settings.flask_env} mode")
+    logger.info(f"📊 Rate limit: {settings.rate_limit_per_minute} req/min")
+    logger.info(f"📁 Max upload size: {settings.max_upload_size_mb}MB")
+    logger.info(f"🔐 JWT expiration: {settings.jwt_expiration_hours} hours")
+    
     app.run(
         host='0.0.0.0',
-        port=int(os.getenv("PORT", 5000)),
-        debug=(FLASK_ENV == "development")
+        port=settings.port,
+        debug=settings.is_development
     )

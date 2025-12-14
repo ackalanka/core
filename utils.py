@@ -7,17 +7,91 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'm4a', 'ogg'}
 
-def allowed_file(filename):
+# MIME types for audio validation
+ALLOWED_MIME_TYPES = {
+    'audio/wav', 'audio/x-wav', 'audio/wave',
+    'audio/mpeg', 'audio/mp3',
+    'audio/mp4', 'audio/m4a', 'audio/x-m4a',
+    'audio/ogg', 'application/ogg'
+}
+
+
+def allowed_file(filename: str) -> bool:
+    """Check if filename has an allowed extension."""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def save_upload_securely(file_obj, upload_folder):
-    """Saves a file with a unique UUID name to prevent overwrites."""
+
+def validate_file_size(file_obj, max_size_bytes: int) -> bool:
+    """
+    Validate file size without reading entire file into memory.
+    
+    Args:
+        file_obj: Werkzeug FileStorage object
+        max_size_bytes: Maximum allowed size in bytes
+        
+    Returns:
+        True if file is within size limit
+    """
+    # Seek to end to get file size
+    file_obj.seek(0, os.SEEK_END)
+    file_size = file_obj.tell()
+    # Reset file pointer to beginning
+    file_obj.seek(0)
+    
+    return file_size <= max_size_bytes
+
+
+def validate_content_type(file_obj) -> bool:
+    """
+    Validate that the file has an allowed MIME type.
+    
+    Args:
+        file_obj: Werkzeug FileStorage object
+        
+    Returns:
+        True if content type is allowed
+    """
+    content_type = file_obj.content_type
+    if not content_type:
+        return False
+    return content_type.lower() in ALLOWED_MIME_TYPES
+
+
+def save_upload_securely(file_obj, upload_folder: str, max_size_bytes: int = None):
+    """
+    Saves a file with a unique UUID name to prevent overwrites.
+    
+    Args:
+        file_obj: Werkzeug FileStorage object
+        upload_folder: Directory to save the file
+        max_size_bytes: Maximum file size (if None, uses config setting)
+        
+    Returns:
+        Path to saved file
+        
+    Raises:
+        ValueError: If file validation fails
+    """
     if not file_obj or file_obj.filename == '':
         return None
     
     if not allowed_file(file_obj.filename):
-        raise ValueError("File type not allowed")
+        raise ValueError("File type not allowed. Supported formats: wav, mp3, m4a, ogg")
+    
+    # Validate content type
+    if not validate_content_type(file_obj):
+        raise ValueError(f"Invalid content type: {file_obj.content_type}. Must be an audio file.")
+    
+    # Get max size from config if not provided
+    if max_size_bytes is None:
+        from config import settings
+        max_size_bytes = settings.max_upload_size_bytes
+    
+    # Validate file size
+    if not validate_file_size(file_obj, max_size_bytes):
+        max_mb = max_size_bytes / (1024 * 1024)
+        raise ValueError(f"File too large. Maximum size is {max_mb:.0f}MB")
 
     # Generate unique name
     ext = file_obj.filename.rsplit('.', 1)[1].lower()

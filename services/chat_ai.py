@@ -62,11 +62,20 @@ class CardioChatService:
         if not GIGACHAT_AVAILABLE:
             raise RuntimeError("GigaChat client not available in environment.")
 
-        giga = GigaChat(credentials=self.auth_key, scope="GIGACHAT_API_PERS", verify_ssl_certs=False)
+        # Import settings here to avoid circular imports
+        from config import settings
+        
+        # Use SSL verification from config (default: True for production safety)
+        giga = GigaChat(
+            credentials=self.auth_key, 
+            scope="GIGACHAT_API_PERS", 
+            verify_ssl_certs=settings.verify_ssl
+        )
         payload = Chat(messages=[Messages(role=MessagesRole.USER, content=prompt)], temperature=temperature)
         response = giga.chat(payload)
         # Original code used response.choices[0].message.content
         return getattr(response.choices[0].message, "content", str(response))
+
 
     def generate_explanation(self, user_profile: Dict[str, Any], scores: Dict[str, float], supplements_data: Dict[str, Any]) -> str:
         """
