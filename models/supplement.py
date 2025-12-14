@@ -1,15 +1,21 @@
 # models/supplement.py
 """
 Supplement and Condition models for knowledge base storage.
+Includes vector embeddings for RAG semantic search.
 """
 import uuid
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 
 from database.connection import Base
+
+# Embedding dimension for paraphrase-multilingual-MiniLM-L12-v2
+EMBEDDING_DIMENSION = 384
 
 
 class Condition(Base):
@@ -60,8 +66,8 @@ class Supplement(Base):
     """
     Supplement/nutrient recommendation for a condition.
     
-    Contains dosage, mechanism, keywords for search, and warnings.
-    The embedding column is reserved for future RAG vector search.
+    Contains dosage, mechanism, keywords for search, warnings,
+    and vector embeddings for semantic RAG search.
     """
     __tablename__ = "supplements"
     
@@ -101,8 +107,12 @@ class Supplement(Base):
         nullable=True,
         comment="Precautions and warnings"
     )
-    # Reserved for RAG vector embeddings (Phase 2.5)
-    # Will be: embedding = Column(Vector(384), nullable=True)
+    # Vector embedding for semantic search (RAG)
+    embedding = Column(
+        Vector(EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="384-dim vector from sentence-transformers"
+    )
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -118,13 +128,26 @@ class Supplement(Base):
     # Relationship to condition
     condition = relationship("Condition", back_populates="supplements")
     
-    # Index for keyword search
+    # Indexes
     __table_args__ = (
         Index('ix_supplements_keywords', 'keywords', postgresql_using='gin'),
+        # Note: HNSW index for vector similarity will be added via migration
     )
     
     def __repr__(self) -> str:
         return f"<Supplement {self.name}>"
+    
+    def get_embedding_text(self) -> str:
+        """
+        Get text representation for embedding generation.
+        Combines name, mechanism, and keywords for richer context.
+        """
+        parts = [self.name]
+        if self.mechanism:
+            parts.append(self.mechanism)
+        if self.keywords:
+            parts.append(" ".join(self.keywords))
+        return " ".join(parts)
     
     def to_dict(self) -> dict:
         """Convert supplement to dictionary for API responses."""
@@ -134,5 +157,7 @@ class Supplement(Base):
             "dosage": self.dosage,
             "mechanism": self.mechanism,
             "keywords": self.keywords or [],
-            "warnings": self.warnings
+            "warnings": self.warnings,
+            "has_embedding": self.embedding is not None
         }
+

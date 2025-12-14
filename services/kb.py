@@ -1,14 +1,14 @@
 # services/kb.py
 """
 Knowledge Base Service for supplement retrieval.
-Uses PostgreSQL database with fallback to JSON file.
+Uses PostgreSQL with pgvector for semantic RAG search.
 """
 import json
 import logging
 import re
 from typing import Dict, Any, List, Optional
 
-from sqlalchemy import or_, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -18,10 +18,13 @@ _token_re = re.compile(r"[а-яa-z0-9\-]+", re.IGNORECASE)
 
 class KnowledgeBaseService:
     """
-    Service for finding relevant supplements based on search queries.
+    Service for finding relevant supplements using hybrid search.
     
-    Supports both database and JSON file as data sources.
-    Database is preferred when available.
+    Combines:
+    1. Vector similarity search (semantic understanding)
+    2. Keyword matching (exact term matching)
+    
+    Database is preferred when available, with JSON fallback.
     """
     
     def __init__(self, filepath: str = 'knowledge_base.json', use_database: bool = True):
@@ -38,39 +41,47 @@ class KnowledgeBaseService:
             "воспаление": ["crp", "nf-kb", "куркумин", "омега-3", "ресвератрол"]
         }
         
-        # Try database first, fall back to JSON
+        # Check database availability
         self._db_available = False
+        self._embeddings_available = False
+        
         if use_database:
-            self._db_available = self._check_database()
+            self._db_available, self._embeddings_available = self._check_database()
         
         # Load JSON as fallback
         if not self._db_available:
             self.data = self._load_json_data()
         else:
             self.data = []
-            logger.info("Knowledge Base using PostgreSQL database")
+            mode = "with embeddings" if self._embeddings_available else "keyword only"
+            logger.info(f"Knowledge Base using PostgreSQL ({mode})")
     
-    def _check_database(self) -> bool:
-        """Check if database connection and data is available."""
+    def _check_database(self) -> tuple:
+        """Check database and embedding availability."""
         try:
             from database.connection import check_db_connection, get_db_session
             from models import Supplement
             
             if not check_db_connection():
-                return False
+                return False, False
             
-            # Check if supplements exist
             with get_db_session() as db:
-                count = db.query(Supplement).count()
-                if count > 0:
-                    logger.info(f"Knowledge Base loaded from database: {count} supplements")
-                    return True
-                else:
+                total = db.query(Supplement).count()
+                with_embeddings = db.query(Supplement).filter(
+                    Supplement.embedding.isnot(None)
+                ).count()
+                
+                if total == 0:
                     logger.warning("Database connected but no supplements found. Using JSON fallback.")
-                    return False
+                    return False, False
+                
+                has_embeddings = with_embeddings > 0
+                logger.info(f"Knowledge Base: {total} supplements, {with_embeddings} with embeddings")
+                return True, has_embeddings
+                
         except Exception as e:
             logger.warning(f"Database not available: {e}. Using JSON fallback.")
-            return False
+            return False, False
     
     def _load_json_data(self) -> List[Dict]:
         """Load knowledge base from JSON file."""
@@ -102,7 +113,7 @@ class KnowledgeBaseService:
     
     def find_relevant_supplements(self, search_query: str, top_k: int = 5) -> Dict[str, Any]:
         """
-        Find relevant supplements based on search query.
+        Find relevant supplements using hybrid search.
         
         Args:
             search_query: Text query from ML service
@@ -116,13 +127,97 @@ class KnowledgeBaseService:
         
         # Use database if available
         if self._db_available:
-            return self._find_from_database(search_query, top_k)
+            if self._embeddings_available:
+                return self._find_hybrid(search_query, top_k)
+            else:
+                return self._find_keyword_only(search_query, top_k)
         
         # Fall back to JSON
         return self._find_from_json(search_query, top_k)
     
-    def _find_from_database(self, search_query: str, top_k: int) -> Dict[str, Any]:
-        """Find supplements from PostgreSQL database."""
+    def _find_hybrid(self, search_query: str, top_k: int) -> Dict[str, Any]:
+        """
+        Hybrid search: combine vector similarity with keyword scores.
+        
+        This is true RAG - semantic understanding + exact matching.
+        """
+        try:
+            from database.connection import get_db_session
+            from models import Supplement, Condition
+            from services.embedding_service import embedding_service
+            
+            logger.info(f"KB Hybrid Search: '{search_query}'")
+            
+            # Generate query embedding
+            query_embedding = embedding_service.generate_embedding(search_query)
+            
+            # Prepare keyword terms
+            raw_tokens = self._tokenize(search_query)
+            expanded = self._expand_terms(raw_tokens)
+            
+            with get_db_session() as db:
+                # Get all supplements with embeddings
+                supplements = db.query(Supplement).join(Condition).filter(
+                    Supplement.embedding.isnot(None)
+                ).all()
+                
+                scored = []
+                for supp in supplements:
+                    # Vector similarity score (0-1)
+                    vector_distance = supp.embedding.cosine_distance(query_embedding)
+                    vector_score = (1 - vector_distance) * 10  # Scale to 0-10
+                    
+                    # Keyword score (existing logic)
+                    name = (supp.name or '').lower()
+                    mechanism = (supp.mechanism or '').lower()
+                    keywords = ' '.join(supp.keywords or []).lower()
+                    condition_code = supp.condition.code.lower() if supp.condition else ''
+                    
+                    keyword_score = 0
+                    for term in expanded:
+                        if term in name:
+                            keyword_score += 5
+                        if term in keywords:
+                            keyword_score += 3
+                        if term in mechanism:
+                            keyword_score += 1
+                        if term in condition_code:
+                            keyword_score += 4
+                    
+                    # Combined score: weight vector more for semantic understanding
+                    combined_score = (vector_score * 0.6) + (keyword_score * 0.4)
+                    
+                    if combined_score > 0.5:  # Minimum threshold
+                        scored.append({
+                            "name": supp.name,
+                            "score": combined_score,
+                            "vector_score": vector_score,
+                            "keyword_score": keyword_score,
+                            "data": supp.to_dict()
+                        })
+                
+                # Sort by combined score
+                scored.sort(key=lambda x: x["score"], reverse=True)
+                top = scored[:top_k]
+                
+                result = {}
+                for item in top:
+                    if item["name"] not in result:
+                        result[item["name"]] = item["data"]
+                        logger.debug(
+                            f"  {item['name'][:30]}: total={item['score']:.2f} "
+                            f"(vector={item['vector_score']:.2f}, keyword={item['keyword_score']})"
+                        )
+                
+                logger.info(f"KB Hybrid Retrieval: returning {len(result)} items")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Hybrid search error: {e}. Falling back to keyword search.")
+            return self._find_keyword_only(search_query, top_k)
+    
+    def _find_keyword_only(self, search_query: str, top_k: int) -> Dict[str, Any]:
+        """Keyword-based search in database (fallback when no embeddings)."""
         try:
             from database.connection import get_db_session
             from models import Supplement, Condition
@@ -130,10 +225,9 @@ class KnowledgeBaseService:
             raw_tokens = self._tokenize(search_query)
             expanded = self._expand_terms(raw_tokens)
             
-            logger.info(f"KB Database Search: '{search_query}' -> tokens: {list(raw_tokens)[:8]}")
+            logger.info(f"KB Keyword Search: '{search_query}'")
             
             with get_db_session() as db:
-                # Query all supplements and score them
                 supplements = db.query(Supplement).join(Condition).all()
                 
                 scored = []
@@ -161,7 +255,6 @@ class KnowledgeBaseService:
                             "data": supp.to_dict()
                         })
                 
-                # Sort by score and take top_k
                 scored.sort(key=lambda x: x["score"], reverse=True)
                 top = scored[:top_k]
                 
@@ -170,11 +263,11 @@ class KnowledgeBaseService:
                     if item["name"] not in result:
                         result[item["name"]] = item["data"]
                 
-                logger.info(f"KB Database Retrieval: returning {len(result)} items.")
+                logger.info(f"KB Keyword Retrieval: returning {len(result)} items")
                 return result
                 
         except Exception as e:
-            logger.error(f"Database query error: {e}. Falling back to JSON.")
+            logger.error(f"Database keyword search error: {e}. Falling back to JSON.")
             self._db_available = False
             self.data = self._load_json_data()
             return self._find_from_json(search_query, top_k)
@@ -187,7 +280,7 @@ class KnowledgeBaseService:
         raw_tokens = self._tokenize(search_query)
         expanded = self._expand_terms(raw_tokens)
         
-        logger.info(f"KB JSON Search: '{search_query}' -> tokens: {list(raw_tokens)[:8]}")
+        logger.info(f"KB JSON Search: '{search_query}'")
         
         scored = []
         for entry in self.data:
@@ -220,5 +313,5 @@ class KnowledgeBaseService:
             if item["name"] not in result:
                 result[item["name"]] = item["data"]
         
-        logger.info(f"KB JSON Retrieval: returning {len(result)} items.")
+        logger.info(f"KB JSON Retrieval: returning {len(result)} items")
         return result

@@ -768,13 +768,276 @@ Legend: ✅ Pass | ❌ Fail | ⬜ Not Tested
 
 ---
 
-# 🔜 Future Phases
+# ✅ Phase 2.5: RAG Implementation Testing
 
-Sections will be added as phases are implemented:
+## Prerequisites
+
+1. PostgreSQL running with data migrated
+2. Embeddings generated: `python scripts/generate_embeddings.py`
+
+---
+
+## 2.5.1 Embedding Generation
+
+**Purpose**: Verify embeddings are generated for all supplements.
+
+### Test Case 2.5.1.1: Run Embedding Script
+
+**PowerShell**:
+```powershell
+.\venv\Scripts\python.exe scripts/generate_embeddings.py
+```
+
+**Expected Output**:
+```
+==================================================
+CardioVoice Embedding Generation
+==================================================
+📦 Checking embedding column...
+   ✅ Embedding column already exists
+🧠 Generating embeddings...
+   Found X supplements without embeddings
+   Generating embeddings (downloading model if needed)...
+   ✅ Updated X supplements with embeddings
+
+� Verifying embeddings...
+   Total supplements: X
+   With embeddings: X
+   ✅ All supplements have embeddings!
+
+🔎 Testing similarity search...
+   Query: 'сердце усталость энергия'
+   Top 5 similar supplements:
+   - [supplement names with similarity scores]
+
+✅ Embedding generation complete!
+```
+
+### Test Case 2.5.1.2: Verify Embeddings in Database
+
+**PowerShell**:
+```powershell
+docker exec cardiovoice-db psql -U cardiovoice -c "SELECT name, embedding IS NOT NULL as has_embedding FROM supplements LIMIT 5;"
+```
+
+**Expected**: All rows show `has_embedding = t` (true).
+
+---
+
+## 2.5.2 Semantic Search
+
+**Purpose**: Verify semantic search finds related supplements.
+
+### Test Case 2.5.2.1: Check Server Uses Hybrid Search
+
+Restart server and check logs:
+```powershell
+.\venv\Scripts\python.exe app.py
+```
+
+**Expected Log**:
+```
+Knowledge Base: X supplements, X with embeddings
+Knowledge Base using PostgreSQL (with embeddings)
+```
+
+### Test Case 2.5.2.2: Semantic Query via API
+
+**PowerShell**:
+```powershell
+# Login first
+$loginBody = @{ email = "test@example.com"; password = "SecurePass123" } | ConvertTo-Json
+$loginResponse = Invoke-RestMethod -Uri "http://localhost:5000/api/v1/auth/login" `
+    -Method POST -ContentType "application/json" -Body $loginBody
+$token = $loginResponse.data.access_token
+
+# Create test audio file (small valid file)
+$audioBytes = [byte[]](0x52,0x49,0x46,0x46,0x24,0x00,0x00,0x00,0x57,0x41,0x56,0x45)
+[System.IO.File]::WriteAllBytes("$PWD\test.wav", $audioBytes)
+
+# Make analyze request - watch server logs for "KB Hybrid Search"
+```
+
+**Server Log Should Show**:
+```
+KB Hybrid Search: 'query text'
+KB Hybrid Retrieval: returning X items
+```
+
+---
+
+## 2.5.3 Postman Testing
+
+### Setup Postman Environment
+
+Create environment with variables:
+```
+BASE_URL: http://localhost:5000
+TOKEN: (empty, filled by login script)
+```
+
+### Collection Requests
+
+#### 1. Register User
+- **Method**: POST
+- **URL**: `{{BASE_URL}}/api/v1/auth/register`
+- **Headers**: `Content-Type: application/json`
+- **Body** (raw JSON):
+```json
+{
+  "email": "postman@test.com",
+  "password": "SecurePass123"
+}
+```
+- **Tests** (Post-request Script):
+```javascript
+pm.test("Status is 201", () => pm.response.to.have.status(201));
+pm.environment.set("TOKEN", pm.response.json().data.access_token);
+```
+
+#### 2. Login
+- **Method**: POST
+- **URL**: `{{BASE_URL}}/api/v1/auth/login`
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+```json
+{
+  "email": "postman@test.com",
+  "password": "SecurePass123"
+}
+```
+- **Tests**:
+```javascript
+pm.test("Status is 200", () => pm.response.to.have.status(200));
+pm.environment.set("TOKEN", pm.response.json().data.access_token);
+```
+
+#### 3. Get Current User
+- **Method**: GET
+- **URL**: `{{BASE_URL}}/api/v1/auth/me`
+- **Headers**: `Authorization: Bearer {{TOKEN}}`
+- **Tests**:
+```javascript
+pm.test("Status is 200", () => pm.response.to.have.status(200));
+pm.test("Email matches", () => {
+    pm.expect(pm.response.json().data.email).to.equal("postman@test.com");
+});
+```
+
+#### 4. Health Check
+- **Method**: GET
+- **URL**: `{{BASE_URL}}/health`
+- **Tests**:
+```javascript
+pm.test("Status is OK", () => {
+    pm.expect(pm.response.json().status).to.equal("ok");
+});
+pm.test("Has version", () => {
+    pm.expect(pm.response.json().version).to.exist;
+});
+```
+
+#### 5. Analyze (with Audio File)
+- **Method**: POST
+- **URL**: `{{BASE_URL}}/api/v1/analyze`
+- **Headers**: `Authorization: Bearer {{TOKEN}}`
+- **Body** (form-data):
+  - `age`: `45`
+  - `gender`: `male`
+  - `smoking_status`: `non-smoker`
+  - `activity_level`: `moderate`
+  - `audio`: (select file) `test.wav`
+- **Tests**:
+```javascript
+pm.test("Status is 200", () => pm.response.to.have.status(200));
+pm.test("Has risk scores", () => {
+    pm.expect(pm.response.json().data.risk_scores).to.exist;
+});
+pm.test("Has AI explanation", () => {
+    pm.expect(pm.response.json().data.ai_explanation).to.exist;
+});
+```
+
+#### 6. Analyze Without Token (Should Fail)
+- **Method**: POST
+- **URL**: `{{BASE_URL}}/api/v1/analyze`
+- **Body** (form-data): same as above, no auth header
+- **Tests**:
+```javascript
+pm.test("Status is 401", () => pm.response.to.have.status(401));
+pm.test("Auth required message", () => {
+    pm.expect(pm.response.json().code).to.equal("AUTH_REQUIRED");
+});
+```
+
+---
+
+## 📊 Phase 2.5 Test Summary Template
+
+```
+Phase 2.5 Testing - [DATE]
+==========================
+
+| Test Case | Result | Notes |
+|-----------|--------|-------|
+| 2.5.1.1 Run Embedding Script | ⬜ | |
+| 2.5.1.2 Verify in Database | ⬜ | |
+| 2.5.2.1 Server Logs | ⬜ | |
+| 2.5.2.2 Semantic Query | ⬜ | |
+| Postman: Register | ⬜ | |
+| Postman: Login | ⬜ | |
+| Postman: Get Me | ⬜ | |
+| Postman: Health | ⬜ | |
+| Postman: Analyze | ⬜ | |
+| Postman: Analyze No Auth | ⬜ | |
+
+Legend: ✅ Pass | ❌ Fail | ⬜ Not Tested
+```
+
+---
+
+# 📬 Complete Postman Collection
+
+Export this as a Postman collection for easy import:
+
+```json
+{
+  "info": {
+    "name": "CardioVoice API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "BASE_URL", "value": "http://localhost:5000"},
+    {"key": "TOKEN", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {"name": "Register", "request": {"method": "POST", "url": "{{BASE_URL}}/api/v1/auth/register"}},
+        {"name": "Login", "request": {"method": "POST", "url": "{{BASE_URL}}/api/v1/auth/login"}},
+        {"name": "Get Me", "request": {"method": "GET", "url": "{{BASE_URL}}/api/v1/auth/me"}}
+      ]
+    },
+    {
+      "name": "Health", 
+      "request": {"method": "GET", "url": "{{BASE_URL}}/health"}
+    },
+    {
+      "name": "Analyze",
+      "request": {"method": "POST", "url": "{{BASE_URL}}/api/v1/analyze"}
+    }
+  ]
+}
+```
+
+---
+
+# 🔜 Future Phases
 
 - [x] Phase 1: Security & Configuration Testing
 - [x] Phase 2: Database Migration Testing
-- [ ] Phase 2.5: RAG Implementation Testing
+- [x] Phase 2.5: RAG Implementation Testing
 - [ ] Phase 3: Testing Infrastructure
 - [ ] Phase 4: ML Model Integration Testing
 - [ ] Phase 5: Container Testing
@@ -784,6 +1047,6 @@ Sections will be added as phases are implemented:
 
 ---
 
-*Last Updated: 2025-12-14 20:56*
+*Last Updated: 2025-12-14 21:11*
 
 *This document is updated after each phase implementation.*
