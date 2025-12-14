@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     jwt_expiration_hours: int = Field(default=24, description="JWT token expiration in hours")
     
+    # Database Settings
+    db_host: str = Field(default="localhost", description="Database host")
+    db_port: int = Field(default=5432, description="Database port")
+    db_name: str = Field(default="cardiovoice", description="Database name")
+    db_user: str = Field(default="cardiovoice", description="Database user")
+    db_password: str = Field(default="cardiovoice_dev_password", description="Database password")
+    
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str, info) -> str:

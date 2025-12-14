@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension for RAG
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cardiovoice-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cardiovoice
+      POSTGRES_PASSWORD: cardiovoice_dev_password
+      POSTGRES_DB: cardiovoice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardiovoice -d cardiovoice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    name: cardiovoice_postgres_data

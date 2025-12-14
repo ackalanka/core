@@ -1,8 +1,8 @@
 # CardioVoice Backend - Manual Testing Guide
 
 > **Created**: December 14, 2025  
-> **Last Updated**: December 14, 2025 12:56  
-> **Current Phase**: Phase 1 Complete
+> **Last Updated**: December 14, 2025 20:56  
+> **Current Phase**: Phase 2 Complete
 
 ---
 
@@ -548,13 +548,233 @@ TOKEN: (set after login)
   - activity_level: moderate
   - audio: [file upload]
 
+# ✅ Phase 2: Database Migration Testing
+
+## Prerequisites
+
+Before testing Phase 2, ensure Docker Desktop is installed and running.
+
+---
+
+## 2.1 Docker PostgreSQL Setup
+
+**Purpose**: Verify PostgreSQL container starts correctly.
+
+### Test Case 2.1.1: Start Database Container
+
+**PowerShell**:
+```powershell
+cd c:\Users\Akalanka\Desktop\Gigachat\Backend
+docker-compose up -d
+```
+
+**Expected Output**:
+```
+[+] Running 2/2
+ ✔ Volume "cardiovoice_postgres_data" Created
+ ✔ Container cardiovoice-db Started
+```
+
+### Test Case 2.1.2: Check Container Status
+
+**PowerShell**:
+```powershell
+docker ps --filter name=cardiovoice-db
+```
+
+**Expected**: Container is running with status `Up`.
+
+### Test Case 2.1.3: Check pgvector Extension
+
+**PowerShell**:
+```powershell
+docker exec cardiovoice-db psql -U cardiovoice -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+```
+
+**Expected**: Returns row showing `vector` extension is installed.
+
+---
+
+## 2.2 Knowledge Base Migration
+
+**Purpose**: Verify JSON data migrates to database correctly.
+
+### Test Case 2.2.1: Run Migration Script
+
+**PowerShell**:
+```powershell
+.\venv\Scripts\python.exe scripts/migrate_knowledge_base.py
+```
+
+**Expected Output**:
+```
+==================================================
+CardioVoice Knowledge Base Migration
+==================================================
+📦 Initializing database tables...
+📖 Loading knowledge_base.json...
+   Found 4 conditions
+   ✅ Created condition: АГ
+   ✅ Created condition: СД2
+   ✅ Created condition: ИБС
+   ✅ Created condition: Пост-ОИМ (1–3 мес)
+
+✅ Migration complete!
+   Conditions created: 4
+   Supplements created: X
+
+🔍 Verifying migration...
+   Total conditions: 4
+   Total supplements: X
+```
+
+### Test Case 2.2.2: Verify Data in Database
+
+**PowerShell**:
+```powershell
+docker exec cardiovoice-db psql -U cardiovoice -c "SELECT code, name FROM conditions;"
+```
+
+**Expected**: Lists all 4 conditions.
+
+**PowerShell**:
+```powershell
+docker exec cardiovoice-db psql -U cardiovoice -c "SELECT COUNT(*) FROM supplements;"
+```
+
+**Expected**: Returns count > 0.
+
+---
+
+## 2.3 User Persistence (Critical Test!)
+
+**Purpose**: Verify users survive server restarts.
+
+### Test Case 2.3.1: Register → Restart → Login
+
+**Step 1 - Register a new user**:
+```powershell
+$body = @{
+    email = "persistent@test.com"
+    password = "SecurePass123"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:5000/api/v1/auth/register" `
+    -Method POST -ContentType "application/json" -Body $body
+```
+
+**Step 2 - Restart the server**:
+```powershell
+# Stop current server (Ctrl+C in terminal running app.py)
+# Then restart:
+.\venv\Scripts\python.exe app.py
+```
+
+**Step 3 - Login with same user**:
+```powershell
+$body = @{
+    email = "persistent@test.com"
+    password = "SecurePass123"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:5000/api/v1/auth/login" `
+    -Method POST -ContentType "application/json" -Body $body
+```
+
+**Pass Criteria**: 
+- Login succeeds after restart
+- Returns valid JWT token
+- User was NOT lost
+
+---
+
+## 2.4 Supplement Query from Database
+
+**Purpose**: Verify knowledge base queries use database.
+
+### Test Case 2.4.1: Check Server Logs
+
+When server starts, look for:
+```
+Knowledge Base loaded from database: X supplements
+```
+
+NOT:
+```
+Knowledge Base loaded from JSON: 4 categories.
+```
+
+### Test Case 2.4.2: Analyze Endpoint Uses Database
+
+**PowerShell**:
+```powershell
+# Login first
+$loginBody = @{ email = "persistent@test.com"; password = "SecurePass123" } | ConvertTo-Json
+$loginResponse = Invoke-RestMethod -Uri "http://localhost:5000/api/v1/auth/login" `
+    -Method POST -ContentType "application/json" -Body $loginBody
+$token = $loginResponse.data.access_token
+
+# Check server logs after making request
+# Should show: "KB Database Search" not "KB JSON Search"
+```
+
+---
+
+## 2.5 Database Fallback
+
+**Purpose**: Verify JSON fallback when database is unavailable.
+
+### Test Case 2.5.1: Stop Database → Server Uses JSON
+
+**PowerShell**:
+```powershell
+# Stop database
+docker-compose down
+
+# Restart server
+.\venv\Scripts\python.exe app.py
+```
+
+**Expected Log Output**:
+```
+Database not available: ... Using JSON fallback.
+Knowledge Base loaded from JSON: 4 categories.
+```
+
+**Pass Criteria**: Server starts successfully using JSON file.
+
+---
+
+## 📊 Phase 2 Test Summary Template
+
+```
+Phase 2 Testing - [DATE]
+========================
+
+| Test Case | Result | Notes |
+|-----------|--------|-------|
+| 2.1.1 Start Container | ⬜ | |
+| 2.1.2 Container Status | ⬜ | |
+| 2.1.3 pgvector Extension | ⬜ | |
+| 2.2.1 Run Migration | ⬜ | |
+| 2.2.2 Verify Data | ⬜ | |
+| 2.3.1 User Persistence | ⬜ | CRITICAL |
+| 2.4.1 Server Logs | ⬜ | |
+| 2.4.2 Database Query | ⬜ | |
+| 2.5.1 JSON Fallback | ⬜ | |
+
+Legend: ✅ Pass | ❌ Fail | ⬜ Not Tested
+```
+
 ---
 
 # 🔜 Future Phases
 
 Sections will be added as phases are implemented:
 
-- [ ] Phase 2: Database Migration Testing
+- [x] Phase 1: Security & Configuration Testing
+- [x] Phase 2: Database Migration Testing
+- [ ] Phase 2.5: RAG Implementation Testing
 - [ ] Phase 3: Testing Infrastructure
 - [ ] Phase 4: ML Model Integration Testing
 - [ ] Phase 5: Container Testing
@@ -563,5 +783,7 @@ Sections will be added as phases are implemented:
 - [ ] Phase 8: Observability Testing
 
 ---
+
+*Last Updated: 2025-12-14 20:56*
 
 *This document is updated after each phase implementation.*

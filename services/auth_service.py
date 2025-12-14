@@ -1,7 +1,7 @@
 # services/auth_service.py
 """
 Authentication service for user management and JWT token handling.
-Uses in-memory storage (temporary until Phase 2 Database Migration).
+Uses PostgreSQL database for persistent storage.
 """
 import logging
 import uuid
@@ -10,8 +10,11 @@ from typing import Optional, Dict, Any, Tuple
 
 import bcrypt
 import jwt
+from sqlalchemy.exc import IntegrityError
 
 from config import settings
+from database.connection import get_db_session
+from models import User
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +22,11 @@ logger = logging.getLogger(__name__)
 class AuthService:
     """
     Handles user authentication, registration, and token management.
-    
-    Note: Uses in-memory storage. This will be replaced with database
-    storage in Phase 2. Users are lost on server restart.
+    Uses PostgreSQL database for persistent user storage.
     """
     
     def __init__(self):
-        # In-memory user storage: {user_id: user_data}
-        # Will be replaced with database in Phase 2
-        self._users: Dict[str, Dict[str, Any]] = {}
-        # Email to user_id index for quick lookups
-        self._email_index: Dict[str, str] = {}
-        
-        logger.info("AuthService initialized with in-memory storage")
+        logger.info("AuthService initialized with PostgreSQL storage")
     
     def hash_password(self, password: str) -> str:
         """
@@ -100,7 +95,7 @@ class AuthService:
     
     def register_user(self, email: str, password: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
-        Register a new user.
+        Register a new user in the database.
         
         Args:
             email: User's email address
@@ -112,40 +107,36 @@ class AuthService:
         # Normalize email
         email = email.lower().strip()
         
-        # Check if email already exists
-        if email in self._email_index:
-            return False, "Email already registered", None
-        
         # Validate password strength
         if len(password) < 8:
             return False, "Password must be at least 8 characters", None
         
-        # Create user
-        user_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        
-        user_data = {
-            "id": user_id,
-            "email": email,
-            "password_hash": self.hash_password(password),
-            "created_at": now,
-            "updated_at": now
-        }
-        
-        # Store user
-        self._users[user_id] = user_data
-        self._email_index[email] = user_id
-        
-        logger.info(f"New user registered: {email}")
-        
-        # Return user data without password hash
-        safe_user = {
-            "id": user_id,
-            "email": email,
-            "created_at": now
-        }
-        
-        return True, "Registration successful", safe_user
+        try:
+            with get_db_session() as db:
+                # Check if email already exists
+                existing = db.query(User).filter(User.email == email).first()
+                if existing:
+                    return False, "Email already registered", None
+                
+                # Create new user
+                user = User(
+                    email=email,
+                    password_hash=self.hash_password(password)
+                )
+                db.add(user)
+                db.flush()  # Get the ID before commit
+                
+                user_data = user.to_dict()
+                logger.info(f"New user registered: {email}")
+                
+                return True, "Registration successful", user_data
+                
+        except IntegrityError:
+            logger.warning(f"Email already exists: {email}")
+            return False, "Email already registered", None
+        except Exception as e:
+            logger.error(f"Registration error: {e}")
+            return False, "Registration failed", None
     
     def authenticate(self, email: str, password: str) -> Tuple[bool, str, Optional[str]]:
         """
@@ -161,26 +152,32 @@ class AuthService:
         # Normalize email
         email = email.lower().strip()
         
-        # Find user by email
-        user_id = self._email_index.get(email)
-        if not user_id:
-            # Use same message to prevent email enumeration
-            return False, "Invalid email or password", None
-        
-        user = self._users.get(user_id)
-        if not user:
-            return False, "Invalid email or password", None
-        
-        # Verify password
-        if not self.verify_password(password, user["password_hash"]):
-            logger.warning(f"Failed login attempt for: {email}")
-            return False, "Invalid email or password", None
-        
-        # Generate token
-        token = self.create_access_token(user_id, email)
-        
-        logger.info(f"User authenticated: {email}")
-        return True, "Login successful", token
+        try:
+            with get_db_session() as db:
+                # Find user by email
+                user = db.query(User).filter(User.email == email).first()
+                
+                if not user:
+                    # Use same message to prevent email enumeration
+                    return False, "Invalid email or password", None
+                
+                if not user.is_active:
+                    return False, "Account is disabled", None
+                
+                # Verify password
+                if not self.verify_password(password, user.password_hash):
+                    logger.warning(f"Failed login attempt for: {email}")
+                    return False, "Invalid email or password", None
+                
+                # Generate token
+                token = self.create_access_token(str(user.id), email)
+                
+                logger.info(f"User authenticated: {email}")
+                return True, "Login successful", token
+                
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+            return False, "Login failed", None
     
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -192,20 +189,26 @@ class AuthService:
         Returns:
             User data dict or None if not found
         """
-        user = self._users.get(user_id)
-        if not user:
+        try:
+            with get_db_session() as db:
+                user = db.query(User).filter(User.id == user_id).first()
+                
+                if not user:
+                    return None
+                
+                return user.to_dict()
+                
+        except Exception as e:
+            logger.error(f"Error getting user by ID: {e}")
             return None
-        
-        # Return without password hash
-        return {
-            "id": user["id"],
-            "email": user["email"],
-            "created_at": user["created_at"]
-        }
     
     def get_user_count(self) -> int:
         """Get total number of registered users."""
-        return len(self._users)
+        try:
+            with get_db_session() as db:
+                return db.query(User).count()
+        except Exception:
+            return 0
 
 
 # Singleton instance
