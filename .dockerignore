@@ -1,0 +1,71 @@
+# ============================================
+# CardioVoice Backend - Docker Ignore
+# ============================================
+
+# Git
+.git
+.gitignore
+
+# Frontend (separate apps)
+frontend/
+website/
+client/
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+tests/
+
+# Documentation (local only)
+planning/
+docs/
+*.md
+
+# Large files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+test.wav
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temp files
+temp_uploads/*
+!temp_uploads/.gitkeep
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# ML models (mounted separately)
+models/*.pt
+models/*.pth
+models/*.onnx

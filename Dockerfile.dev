@@ -1,0 +1,48 @@
+# ============================================
+# CardioVoice Backend - Development Dockerfile
+# ============================================
+# Use: docker-compose -f docker-compose.dev.yml up
+
+FROM python:3.12-slim
+
+LABEL maintainer="CardioVoice Team"
+LABEL description="CardioVoice Backend API - Development"
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    FLASK_ENV=development \
+    FLASK_DEBUG=1 \
+    FLASK_APP=app.py
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy entrypoint script and make executable
+COPY scripts/entrypoint.sh scripts/entrypoint.sh
+RUN chmod +x scripts/entrypoint.sh
+
+# Create temp_uploads directory
+RUN mkdir -p temp_uploads
+
+# Expose port
+EXPOSE 5000
+
+# Health check - extended start-period for DB initialization
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Use entrypoint for DB initialization, then run Flask dev server
+ENTRYPOINT ["scripts/entrypoint.sh"]
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000", "--reload"]
+

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from config import settings
@@ -28,15 +28,11 @@ engine = create_engine(
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,  # Verify connections before using
-    echo=settings.is_development  # Log SQL in development
+    echo=settings.is_development,  # Log SQL in development
 )
 
 # Session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for all models
 Base = declarative_base()
@@ -45,7 +41,7 @@ Base = declarative_base()
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency for getting database sessions.
-    
+
     Usage:
         with get_db() as db:
             db.query(User).all()
@@ -61,7 +57,7 @@ def get_db() -> Generator[Session, None, None]:
 def get_db_session() -> Generator[Session, None, None]:
     """
     Context manager for database sessions.
-    
+
     Usage:
         with get_db_session() as db:
             user = db.query(User).first()
@@ -84,8 +80,8 @@ def init_db() -> None:
     Use Alembic migrations for production.
     """
     # Import all models to register them with Base
-    from models import User, Condition, Supplement  # noqa: F401
-    
+    from models import Condition, Supplement, User  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
 
@@ -93,7 +89,7 @@ def init_db() -> None:
 def check_db_connection() -> bool:
     """
     Check if database connection is working.
-    
+
     Returns:
         True if connection successful, False otherwise
     """

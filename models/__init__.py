@@ -3,7 +3,7 @@
 SQLAlchemy models for CardioVoice Backend.
 """
 
-from .user import User
 from .supplement import Condition, Supplement
+from .user import User
 
 __all__ = ["User", "Condition", "Supplement"]

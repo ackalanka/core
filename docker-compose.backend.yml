@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # --------------------------
+  # PostgreSQL Database
+  # --------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cardiovoice-db-backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cardiovoice
+      POSTGRES_PASSWORD: cardiovoice_dev_password
+      POSTGRES_DB: cardiovoice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_backend:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U cardiovoice -d cardiovoice" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------
+  # CardioVoice API (Flask)
+  # --------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cardiovoice-api-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - FLASK_APP=app.py
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=cardiovoice
+      - DB_PASSWORD=cardiovoice_dev_password
+      - DB_NAME=cardiovoice
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:5000
+      - RATE_LIMIT_PER_MINUTE=1000
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for hot-reloading
+      - .:/app:cached
+      # Named volume for uploads
+      - uploads_backend:/app/temp_uploads
+      # Exclude specific folders
+      - /app/__pycache__
+      - /app/venv
+      - /app/client
+      - /app/nginx
+      - /app/planning
+
+volumes:
+  postgres_data_backend:
+    name: cardiovoice_postgres_data_backend
+  uploads_backend:
+    name: cardiovoice_uploads_backend

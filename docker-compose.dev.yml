@@ -1,0 +1,137 @@
+# ============================================
+# CardioVoice - Full Stack Development
+# ============================================
+# Use: docker-compose -f docker-compose.dev.yml up --build
+#
+# Services:
+# - nginx    (port 80)  - Reverse proxy
+# - api      (port 5000) - Flask backend
+# - client   (port 5173) - English frontend
+# - website  (port 5174) - Russian frontend
+# - db       (port 5432) - PostgreSQL
+
+services:
+  # --------------------------
+  # Nginx Reverse Proxy
+  # --------------------------
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: cardiovoice-nginx-dev
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - client
+    networks:
+      - cardiovoice-dev-network
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health" ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # --------------------------
+  # PostgreSQL Database
+  # --------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cardiovoice-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cardiovoice
+      POSTGRES_PASSWORD: cardiovoice_dev_password
+      POSTGRES_DB: cardiovoice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U cardiovoice -d cardiovoice" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cardiovoice-dev-network
+
+  # --------------------------
+  # CardioVoice API (Flask)
+  # --------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cardiovoice-api-dev
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - FLASK_APP=app.py
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=cardiovoice
+      - DB_PASSWORD=cardiovoice_dev_password
+      - DB_NAME=cardiovoice
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80,http://localhost:5173,http://localhost:5174
+      - RATE_LIMIT_PER_MINUTE=100
+      # GigaChat key - optional, runs in mock mode if not set
+      # - GIGACHAT_AUTH_KEY=your_key_here
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for hot-reloading
+      - .:/app:cached
+      # Named volume for uploads (don't sync these)
+      - uploads_dev:/app/temp_uploads
+      # Exclude these from sync
+      - /app/__pycache__
+      - /app/.pytest_cache
+      - /app/venv
+      - /app/client
+      - /app/website
+      - /app/nginx
+    networks:
+      - cardiovoice-dev-network
+
+  # --------------------------
+  # Client Frontend (English)
+  # --------------------------
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: cardiovoice-client-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://api:5000
+    volumes:
+      # Mount source code for hot-reloading
+      - ./client:/app:cached
+      # Keep node_modules in container
+      - client_node_modules:/app/node_modules
+    networks:
+      - cardiovoice-dev-network
+
+volumes:
+  postgres_data_dev:
+    name: cardiovoice_postgres_data_dev
+  uploads_dev:
+    name: cardiovoice_uploads_dev
+  client_node_modules:
+    name: cardiovoice_client_node_modules
+
+networks:
+  cardiovoice-dev-network:
+    driver: bridge

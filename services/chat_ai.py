@@ -1,8 +1,9 @@
 # services/chat_ai.py
 import logging
 import os
-from typing import Dict, Any
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutTimeout
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -10,9 +11,11 @@ logger = logging.getLogger(__name__)
 try:
     from gigachat import GigaChat
     from gigachat.models import Chat, Messages, MessagesRole
+
     GIGACHAT_AVAILABLE = True
 except Exception:
     GIGACHAT_AVAILABLE = False
+
 
 class CardioChatService:
     def __init__(self, auth_key: str = None, timeout_seconds: int = 8):
@@ -21,11 +24,18 @@ class CardioChatService:
         self.mock_mode = not bool(auth_key) or not GIGACHAT_AVAILABLE
 
         if self.mock_mode:
-            logger.warning("CardioChatService running in MOCK mode (no auth_key or gigachat client missing).")
+            logger.warning(
+                "CardioChatService running in MOCK mode (no auth_key or gigachat client missing)."
+            )
         else:
             logger.info("CardioChatService initialized with real GigaChat client.")
 
-    def _build_prompt(self, user_profile: Dict[str, Any], scores: Dict[str, float], supplements_data: Dict[str, Any]) -> str:
+    def _build_prompt(
+        self,
+        user_profile: Dict[str, Any],
+        scores: Dict[str, float],
+        supplements_data: Dict[str, Any],
+    ) -> str:
         main_focus = max(scores, key=scores.get) if scores else "Неизвестно"
         if not supplements_data:
             supp_text = "В БАЗЕ ЗНАНИЙ НЕТ ПОДХОДЯЩИХ СРЕДСТВ. В ответе напиши строго: 'К сожалению, на основе текущих данных я не могу подобрать специфические нутриенты.'"
@@ -64,29 +74,38 @@ class CardioChatService:
 
         # Import settings here to avoid circular imports
         from config import settings
-        
+
         # Use SSL verification from config (default: True for production safety)
         giga = GigaChat(
-            credentials=self.auth_key, 
-            scope="GIGACHAT_API_PERS", 
-            verify_ssl_certs=settings.verify_ssl
+            credentials=self.auth_key,
+            scope="GIGACHAT_API_PERS",
+            verify_ssl_certs=settings.verify_ssl,
         )
-        payload = Chat(messages=[Messages(role=MessagesRole.USER, content=prompt)], temperature=temperature)
+        payload = Chat(
+            messages=[Messages(role=MessagesRole.USER, content=prompt)],
+            temperature=temperature,
+        )
         response = giga.chat(payload)
         # Original code used response.choices[0].message.content
         return getattr(response.choices[0].message, "content", str(response))
 
-
-    def generate_explanation(self, user_profile: Dict[str, Any], scores: Dict[str, float], supplements_data: Dict[str, Any]) -> str:
+    def generate_explanation(
+        self,
+        user_profile: Dict[str, Any],
+        scores: Dict[str, float],
+        supplements_data: Dict[str, Any],
+    ) -> str:
         """
         Public method to produce the chat explanation with timeouts and fallbacks.
         """
         if self.mock_mode:
             # deterministic fallback that looks plausible
             main_focus = max(scores, key=scores.get) if scores else "общий риск"
-            return (f"Краткий вывод: обнаружен повышенный риск — {main_focus}. "
-                    "Рекомендация: увеличить физическую активность, сократить курение и обсудить с врачом подходящие нутриенты. "
-                    "Данная информация носит ознакомительный характер и не заменяет консультацию врача.")
+            return (
+                f"Краткий вывод: обнаружен повышенный риск — {main_focus}. "
+                "Рекомендация: увеличить физическую активность, сократить курение и обсудить с врачом подходящие нутриенты. "
+                "Данная информация носит ознакомительный характер и не заменяет консультацию врача."
+            )
 
         prompt = self._build_prompt(user_profile, scores, supplements_data)
 

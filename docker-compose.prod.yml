@@ -1,0 +1,116 @@
+# ============================================
+# CardioVoice - Full Stack Production
+# ============================================
+# Use: docker-compose -f docker-compose.prod.yml up -d --build
+#
+# Services:
+# - nginx    (port 80)  - Reverse proxy + static files
+# - api      (port 5000) - Flask backend (internal)
+# - db       (port 5432) - PostgreSQL (internal)
+#
+# Frontends are built and served by nginx
+
+services:
+  # --------------------------
+  # Nginx Reverse Proxy
+  # --------------------------
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: cardiovoice-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - client_dist:/usr/share/nginx/html/client:ro
+      - website_dist:/usr/share/nginx/html/website:ro
+    depends_on:
+      - api
+      - client-build
+    networks:
+      - cardiovoice-network
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health" ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # --------------------------
+  # PostgreSQL Database
+  # --------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cardiovoice-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-cardiovoice}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cardiovoice_secret}
+      POSTGRES_DB: ${DB_NAME:-cardiovoice}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-cardiovoice}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cardiovoice-network
+
+  # --------------------------
+  # CardioVoice API
+  # --------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cardiovoice-api
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-cardiovoice}
+      - DB_PASSWORD=${DB_PASSWORD:-cardiovoice_secret}
+      - DB_NAME=${DB_NAME:-cardiovoice}
+      - GIGACHAT_AUTH_KEY=${GIGACHAT_AUTH_KEY}
+      - VERIFY_SSL=${VERIFY_SSL:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/temp_uploads
+    networks:
+      - cardiovoice-network
+
+  # --------------------------
+  # Client Build (one-shot)
+  # --------------------------
+  client-build:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: cardiovoice-client-build
+    volumes:
+      - client_dist:/output
+    entrypoint: [ "/bin/sh", "-c", "cp -r /usr/share/nginx/html/* /output/" ]
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+  client_dist:
+    driver: local
+  website_dist:
+    driver: local
+
+networks:
+  cardiovoice-network:
+    driver: bridge
