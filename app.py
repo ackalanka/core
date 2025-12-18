@@ -87,13 +87,21 @@ add_security_headers(app)
 # RATE LIMITING
 # --------------------------
 
-limiter = Limiter(
-    key_func=get_remote_address,
-    app=app,
-    default_limits=[f"{settings.rate_limit_per_minute} per minute"],
-    storage_uri="memory://",
-    strategy="fixed-window"
-)
+# Disable rate limiting in test environment
+if os.environ.get("FLASK_ENV") == "testing":
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        enabled=False  # Disable in tests
+    )
+else:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=[f"{settings.rate_limit_per_minute} per minute"],
+        storage_uri="memory://",
+        strategy="fixed-window"
+    )
 
 
 # Custom rate limit error handler
@@ -140,9 +148,12 @@ if settings.is_production:
     if any(o == "*" for o in allowed_origins):
         raise RuntimeError("Using '*' for ALLOWED_ORIGINS in production is forbidden for security reasons.")
 
-# In development, add default local origins
-if settings.is_development and not allowed_origins:
-    allowed_origins = ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:3000"]
+# In development, ensure Vite dev server ports are always included
+if settings.is_development:
+    vite_origins = ["http://localhost:5173", "http://localhost:5174"]
+    for origin in vite_origins:
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
 
 # Register CORS for API routes only (scoped)
 CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=settings.cors_credentials)
@@ -246,10 +257,18 @@ def register():
         }), 201
         
     except ValidationError as ve:
+        # Convert validation errors to serializable format
+        errors_list = []
+        for err in ve.errors():
+            errors_list.append({
+                "field": ".".join(str(loc) for loc in err.get("loc", [])),
+                "message": err.get("msg", "Validation error"),
+                "type": err.get("type", "unknown")
+            })
         return jsonify({
             "status": "error",
             "message": "Invalid input data",
-            "errors": ve.errors(),
+            "errors": errors_list,
             "code": "VALIDATION_ERROR"
         }), 400
     except Exception as e:

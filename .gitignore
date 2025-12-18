@@ -121,3 +121,15 @@ models/*.h5
 # -----------------------
 docs/_build/
 site/
+
+# -----------------------
+# Project Documentation
+# -----------------------
+planning/
+
+# -----------------------
+# Frontend
+# -----------------------
+frontend/
+website/
+client/
