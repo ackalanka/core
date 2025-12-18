@@ -24,8 +24,12 @@ from pydantic import ValidationError
 from config import settings
 from middleware import add_security_headers, get_current_user, require_auth
 from schemas import ProfileModel, UserLoginModel, UserRegisterModel
-from services import (CardioChatService, KnowledgeBaseService, MockMLService,
-                      auth_service)
+from services import (
+    CardioChatService,
+    KnowledgeBaseService,
+    MockMLService,
+    auth_service,
+)
 from utils import save_upload_securely
 
 # --------------------------

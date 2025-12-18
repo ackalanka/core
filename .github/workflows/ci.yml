@@ -56,7 +56,11 @@ jobs:
           pip install pytest pytest-cov httpx
       - name: Run Tests
         env:
-          DATABASE_URL: postgresql://cardiovoice:test_password@localhost:5432/cardiovoice_test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: cardiovoice_test
+          DB_USER: cardiovoice
+          DB_PASSWORD: test_password
           GIGACHAT_AUTH_KEY: mock_key
           FLASK_ENV: testing
         run: |
