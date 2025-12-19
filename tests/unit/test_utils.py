@@ -2,7 +2,6 @@
 """Unit tests for utility functions."""
 import io
 
-import pytest
 from werkzeug.datastructures import FileStorage
 
 

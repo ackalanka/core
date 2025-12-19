@@ -1,6 +1,5 @@
 # tests/integration/test_health.py
 """Integration tests for health endpoint."""
-import pytest
 
 
 class TestHealthEndpoint:

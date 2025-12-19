@@ -4,7 +4,7 @@ Embedding service for generating vector embeddings from text.
 Uses sentence-transformers with multilingual model for Russian support.
 """
 import logging
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -37,7 +37,7 @@ class EmbeddingService:
             from sentence_transformers import SentenceTransformer
 
             self._model = SentenceTransformer(self.model_name)
-            logger.info(f"Model loaded successfully")
+            logger.info("Model loaded successfully")
         return self._model
 
     def generate_embedding(self, text: str) -> List[float]:

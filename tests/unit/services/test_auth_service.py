@@ -1,6 +1,5 @@
 # tests/unit/services/test_auth_service.py
 """Unit tests for authentication service."""
-import pytest
 
 
 class TestAuthServicePasswordHashing:

@@ -1,6 +1,5 @@
 # tests/integration/test_auth_endpoints.py
 """Integration tests for authentication API endpoints."""
-import pytest
 
 
 class TestRegisterEndpoint:

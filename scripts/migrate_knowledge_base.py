@@ -12,8 +12,8 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.connection import check_db_connection, get_db_session, init_db
-from models import Condition, Supplement
+from database.connection import check_db_connection, get_db_session, init_db  # noqa: E402
+from models import Condition, Supplement  # noqa: E402
 
 # Mapping of condition codes to full names
 CONDITION_NAMES = {
@@ -109,7 +109,7 @@ def migrate_data():
         # Commit all changes
         db.commit()
 
-    print(f"\n✅ Migration complete!")
+    print("\n✅ Migration complete!")
     print(f"   Conditions created: {conditions_created}")
     print(f"   Supplements created: {supplements_created}")
 

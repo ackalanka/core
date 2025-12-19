@@ -11,11 +11,11 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import text
+from sqlalchemy import text  # noqa: E402
 
-from database.connection import check_db_connection, engine, get_db_session
-from models import Supplement
-from services.embedding_service import embedding_service
+from database.connection import check_db_connection, engine, get_db_session  # noqa: E402
+from models import Supplement  # noqa: E402
+from services.embedding_service import embedding_service  # noqa: E402
 
 
 def add_embedding_column():
@@ -27,8 +27,8 @@ def add_embedding_column():
         result = conn.execute(
             text(
                 """
-            SELECT column_name 
-            FROM information_schema.columns 
+            SELECT column_name
+            FROM information_schema.columns
             WHERE table_name = 'supplements' AND column_name = 'embedding'
         """
             )
@@ -43,7 +43,7 @@ def add_embedding_column():
         conn.execute(
             text(
                 """
-            ALTER TABLE supplements 
+            ALTER TABLE supplements
             ADD COLUMN embedding vector(384)
         """
             )
@@ -61,8 +61,8 @@ def create_vector_index():
         result = conn.execute(
             text(
                 """
-            SELECT indexname 
-            FROM pg_indexes 
+            SELECT indexname
+            FROM pg_indexes
             WHERE tablename = 'supplements' AND indexname = 'ix_supplements_embedding'
         """
             )
@@ -77,8 +77,8 @@ def create_vector_index():
         conn.execute(
             text(
                 """
-            CREATE INDEX ix_supplements_embedding 
-            ON supplements 
+            CREATE INDEX ix_supplements_embedding
+            ON supplements
             USING hnsw (embedding vector_cosine_ops)
         """
             )
@@ -97,7 +97,6 @@ def generate_embeddings():
 
         if not supplements:
             # Check if any have embeddings
-            total = db.query(Supplement).count()
             with_embeddings = (
                 db.query(Supplement).filter(Supplement.embedding.isnot(None)).count()
             )
@@ -163,8 +162,6 @@ def test_similarity_search():
 
     with get_db_session() as db:
         # Vector similarity search using pgvector
-        from sqlalchemy import func
-
         results = (
             db.query(
                 Supplement.name,

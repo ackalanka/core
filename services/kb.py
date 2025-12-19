@@ -6,9 +6,8 @@ Uses PostgreSQL with pgvector for semantic RAG search.
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
