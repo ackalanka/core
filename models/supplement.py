@@ -6,7 +6,6 @@ Includes vector embeddings for RAG semantic search.
 import uuid
 from datetime import datetime, timezone
 
-
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID

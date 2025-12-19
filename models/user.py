@@ -5,7 +5,6 @@ User model for authentication and profile storage.
 import uuid
 from datetime import datetime, timezone
 
-
 from sqlalchemy import Boolean, Column, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 

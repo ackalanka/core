@@ -5,7 +5,6 @@ Pytest fixtures for CardioVoice Backend tests.
 import os
 import sys
 
-
 import pytest
 
 # Add project root to path

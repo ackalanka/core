@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 
-
 logger = logging.getLogger(__name__)
 
 _token_re = re.compile(r"[а-яa-z0-9\-]+", re.IGNORECASE)

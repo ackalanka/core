@@ -2,7 +2,6 @@ import logging
 import os
 import uuid
 
-
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "ogg"}

@@ -54,6 +54,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov httpx
+      - name: Initialize Database Tables
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: cardiovoice_test
+          DB_USER: cardiovoice
+          DB_PASSWORD: test_password
+          FLASK_ENV: testing
+        run: |
+          python -c "from database.connection import init_db; init_db()"
       - name: Run Tests
         env:
           DB_HOST: localhost
