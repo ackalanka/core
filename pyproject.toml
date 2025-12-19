@@ -1,0 +1,54 @@
+# pyproject.toml
+# Black-compatible configurations for all linting tools
+# Reference: https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | __pycache__
+  | \.pytest_cache
+  | node_modules
+  | client
+  | website
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = [".git", "venv", "__pycache__", "node_modules", "client", "website"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # Line too long (Black handles this)
+    "B905",  # zip() without strict= (not critical)
+    "B007",  # Unused loop control variable (minor)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app.py" = ["E402"]  # load_dotenv() must run before imports
+"scripts/*" = ["E402"]  # sys.path setup before imports
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "config", "database", "middleware", "models", "services", "schemas", "utils"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+exclude = ["venv", "client", "website", "node_modules"]
+

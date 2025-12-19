@@ -13,7 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text  # noqa: E402
 
-from database.connection import check_db_connection, engine, get_db_session  # noqa: E402
+from database.connection import (  # noqa: E402
+    check_db_connection,
+    engine,
+    get_db_session,
+)
 from models import Supplement  # noqa: E402
 from services.embedding_service import embedding_service  # noqa: E402
 

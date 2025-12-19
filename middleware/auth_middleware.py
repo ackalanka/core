@@ -4,7 +4,7 @@ JWT Authentication middleware for protected routes.
 """
 import logging
 from functools import wraps
-from typing import Any, Dict, Optional
+from typing import Any
 
 import jwt
 from flask import g, jsonify, request
@@ -14,7 +14,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-def get_token_from_header() -> Optional[str]:
+def get_token_from_header() -> str | None:
     """
     Extract JWT token from Authorization header.
     Expected format: 'Bearer <token>'
@@ -30,7 +30,7 @@ def get_token_from_header() -> Optional[str]:
     return parts[1]
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_token(token: str) -> dict[str, Any] | None:
     """
     Decode and validate JWT token.
     Returns payload if valid, None otherwise.
@@ -48,7 +48,7 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_current_user() -> Optional[Dict[str, Any]]:
+def get_current_user() -> dict[str, Any] | None:
     """
     Get current authenticated user from Flask g object.
     Returns None if not authenticated.

@@ -4,8 +4,8 @@ Database connection and session management for CardioVoice Backend.
 Uses SQLAlchemy 2.0 with PostgreSQL.
 """
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker

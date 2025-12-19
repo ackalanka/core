@@ -4,8 +4,8 @@ Authentication service for user management and JWT token handling.
 Uses PostgreSQL database for persistent storage.
 """
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import bcrypt
 import jwt
@@ -69,7 +69,7 @@ class AuthService:
         Returns:
             JWT token string
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiration = now + timedelta(hours=settings.jwt_expiration_hours)
 
         payload = {
@@ -89,7 +89,7 @@ class AuthService:
 
     def register_user(
         self, email: str, password: str
-    ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    ) -> tuple[bool, str, dict[str, Any] | None]:
         """
         Register a new user in the database.
 
@@ -131,9 +131,7 @@ class AuthService:
             logger.error(f"Registration error: {e}")
             return False, "Registration failed", None
 
-    def authenticate(
-        self, email: str, password: str
-    ) -> Tuple[bool, str, Optional[str]]:
+    def authenticate(self, email: str, password: str) -> tuple[bool, str, str | None]:
         """
         Authenticate a user and return an access token.
 
@@ -174,7 +172,7 @@ class AuthService:
             logger.error(f"Authentication error: {e}")
             return False, "Login failed", None
 
-    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
         """
         Get user data by ID (excluding password hash).
 

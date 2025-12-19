@@ -2,7 +2,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutTimeout
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +31,9 @@ class CardioChatService:
 
     def _build_prompt(
         self,
-        user_profile: Dict[str, Any],
-        scores: Dict[str, float],
-        supplements_data: Dict[str, Any],
+        user_profile: dict[str, Any],
+        scores: dict[str, float],
+        supplements_data: dict[str, Any],
     ) -> str:
         main_focus = max(scores, key=scores.get) if scores else "Неизвестно"
         if not supplements_data:
@@ -49,8 +49,8 @@ class CardioChatService:
             )
             supp_text = "--- РАЗРЕШЕННЫЙ СПИСОК НУТРИЕНТОВ (Knowledge Base) ---\n"
             for name, data in supplements_data.items():
-                mechanism = data.get('mechanism', '')
-                warnings = data.get('warnings', '-')
+                mechanism = data.get("mechanism", "")
+                warnings = data.get("warnings", "-")
                 supp_text += (
                     f"- {data.get('name')}: {mechanism}. "
                     f"(Меры предосторожности: {warnings})\n"
@@ -104,9 +104,9 @@ class CardioChatService:
 
     def generate_explanation(
         self,
-        user_profile: Dict[str, Any],
-        scores: Dict[str, float],
-        supplements_data: Dict[str, Any],
+        user_profile: dict[str, Any],
+        scores: dict[str, float],
+        supplements_data: dict[str, Any],
     ) -> str:
         """
         Public method to produce the chat explanation with timeouts and fallbacks.

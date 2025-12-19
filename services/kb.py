@@ -6,8 +6,7 @@ Uses PostgreSQL with pgvector for semantic RAG search.
 import json
 import logging
 import re
-from typing import Any, Dict, List
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,8 @@ class KnowledgeBaseService:
 
                 has_embeddings = with_embeddings > 0
                 logger.info(
-                    f"Knowledge Base: {total} supplements, {with_embeddings} with embeddings"
+                    f"Knowledge Base: {total} supplements, "
+                    f"{with_embeddings} with embeddings"
                 )
                 return True, has_embeddings
 
@@ -96,10 +96,10 @@ class KnowledgeBaseService:
             logger.warning(f"Database not available: {e}. Using JSON fallback.")
             return False, False
 
-    def _load_json_data(self) -> List[Dict]:
+    def _load_json_data(self) -> list[dict]:
         """Load knowledge base from JSON file."""
         try:
-            with open(self.filepath, "r", encoding="utf-8") as f:
+            with open(self.filepath, encoding="utf-8") as f:
                 data = json.load(f)
             logger.info(f"Knowledge Base loaded from JSON: {len(data)} categories.")
             return data
@@ -126,7 +126,7 @@ class KnowledgeBaseService:
 
     def find_relevant_supplements(
         self, search_query: str, top_k: int = 5
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find relevant supplements using hybrid search.
 
@@ -150,7 +150,7 @@ class KnowledgeBaseService:
         # Fall back to JSON
         return self._find_from_json(search_query, top_k)
 
-    def _find_hybrid(self, search_query: str, top_k: int) -> Dict[str, Any]:
+    def _find_hybrid(self, search_query: str, top_k: int) -> dict[str, Any]:
         """
         Hybrid search: combine vector similarity with keyword scores.
 
@@ -238,7 +238,7 @@ class KnowledgeBaseService:
             logger.error(f"Hybrid search error: {e}. Falling back to keyword search.")
             return self._find_keyword_only(search_query, top_k)
 
-    def _find_keyword_only(self, search_query: str, top_k: int) -> Dict[str, Any]:
+    def _find_keyword_only(self, search_query: str, top_k: int) -> dict[str, Any]:
         """Keyword-based search in database (fallback when no embeddings)."""
         try:
             from database.connection import get_db_session
@@ -294,7 +294,7 @@ class KnowledgeBaseService:
             self.data = self._load_json_data()
             return self._find_from_json(search_query, top_k)
 
-    def _find_from_json(self, search_query: str, top_k: int) -> Dict[str, Any]:
+    def _find_from_json(self, search_query: str, top_k: int) -> dict[str, Any]:
         """Find supplements from JSON data (original implementation)."""
         if not self.data:
             return {}

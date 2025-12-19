@@ -1,7 +1,6 @@
 # services/ml.py
 import logging
 import random
-from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ class MockMLService:
 
     def get_mock_risk_scores(
         self, age: int, gender: str, smoking_status: str, activity_level: str
-    ) -> Tuple[Dict[str, float], str]:
+    ) -> tuple[dict[str, float], str]:
         # Base logic (keeps your prior heuristics)
         base_ihd_risk = 0.05 + ((age - 20) * 0.007) if age > 20 else 0.05
         gender_mult = 1.2 if gender == "male" else 1.0

@@ -12,7 +12,11 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.connection import check_db_connection, get_db_session, init_db  # noqa: E402
+from database.connection import (  # noqa: E402
+    check_db_connection,
+    get_db_session,
+    init_db,
+)
 from models import Condition, Supplement  # noqa: E402
 
 # Mapping of condition codes to full names
@@ -26,7 +30,7 @@ CONDITION_NAMES = {
 
 def load_knowledge_base(filepath: str = "knowledge_base.json") -> list:
     """Load knowledge base from JSON file."""
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         return json.load(f)
 
 

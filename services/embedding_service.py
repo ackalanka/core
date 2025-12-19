@@ -4,7 +4,6 @@ Embedding service for generating vector embeddings from text.
 Uses sentence-transformers with multilingual model for Russian support.
 """
 import logging
-from typing import List
 
 import numpy as np
 
@@ -40,7 +39,7 @@ class EmbeddingService:
             logger.info("Model loaded successfully")
         return self._model
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """
         Generate embedding vector for a single text.
 
@@ -57,8 +56,8 @@ class EmbeddingService:
         return embedding.tolist()
 
     def generate_embeddings_batch(
-        self, texts: List[str], batch_size: int = 32, show_progress: bool = True
-    ) -> List[List[float]]:
+        self, texts: list[str], batch_size: int = 32, show_progress: bool = True
+    ) -> list[list[float]]:
         """
         Generate embeddings for multiple texts efficiently.
 
@@ -101,7 +100,7 @@ class EmbeddingService:
         return result
 
     def compute_similarity(
-        self, embedding1: List[float], embedding2: List[float]
+        self, embedding1: list[float], embedding2: list[float]
     ) -> float:
         """
         Compute cosine similarity between two embeddings.

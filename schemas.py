@@ -1,5 +1,5 @@
 import re
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -77,5 +77,5 @@ class ErrorResponseModel(BaseModel):
 
     status: str = "error"
     message: str
-    code: Optional[str] = None
-    errors: Optional[list] = None
+    code: str | None = None
+    errors: list | None = None

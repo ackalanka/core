@@ -5,7 +5,6 @@ Uses Pydantic Settings for validation and type safety.
 """
 import os
 from functools import lru_cache
-from typing import List, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,9 +33,7 @@ class Settings(BaseSettings):
     cors_credentials: bool = Field(default=False, description="Allow CORS credentials")
 
     # GigaChat API
-    gigachat_auth_key: Optional[str] = Field(
-        default=None, description="GigaChat API key"
-    )
+    gigachat_auth_key: str | None = Field(default=None, description="GigaChat API key")
 
     # Security Settings
     max_upload_size_mb: int = Field(default=10, description="Max audio file size in MB")
@@ -86,7 +83,7 @@ class Settings(BaseSettings):
         return v
 
     @property
-    def allowed_origins_list(self) -> List[str]:
+    def allowed_origins_list(self) -> list[str]:
         """Parse allowed origins into a list."""
         if not self.allowed_origins:
             return []
@@ -108,7 +105,7 @@ class Settings(BaseSettings):
         return self.flask_env.lower() == "production"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Get cached settings instance.
