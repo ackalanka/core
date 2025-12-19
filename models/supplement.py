@@ -3,6 +3,7 @@
 Supplement and Condition models for knowledge base storage.
 Includes vector embeddings for RAG semantic search.
 """
+
 import uuid
 from datetime import UTC, datetime
 

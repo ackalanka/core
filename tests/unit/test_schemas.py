@@ -1,5 +1,6 @@
 # tests/unit/test_schemas.py
 """Unit tests for Pydantic schema validation."""
+
 import pytest
 from pydantic import ValidationError
 

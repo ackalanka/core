@@ -2,6 +2,7 @@
 """
 User model for authentication and profile storage.
 """
+
 import uuid
 from datetime import UTC, datetime
 
@@ -46,6 +47,7 @@ class User(Base):
         return f"<User {self.email}>"
 
     from typing import Any
+
     def to_dict(self) -> dict[str, Any]:
         """Convert user to dictionary (safe, no password)."""
         return {

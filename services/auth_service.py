@@ -3,6 +3,7 @@
 Authentication service for user management and JWT token handling.
 Uses PostgreSQL database for persistent storage.
 """
+
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any

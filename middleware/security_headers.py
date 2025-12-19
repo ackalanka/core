@@ -3,6 +3,7 @@
 Security headers middleware for Flask application.
 Adds protective HTTP headers to all responses.
 """
+
 from flask import Flask
 
 

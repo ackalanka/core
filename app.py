@@ -91,7 +91,9 @@ add_security_headers(app)
 # Disable rate limiting in test environment
 if os.environ.get("FLASK_ENV") == "testing":
     limiter = Limiter(
-        key_func=get_remote_address, app=app, enabled=False  # Disable in tests
+        key_func=get_remote_address,
+        app=app,
+        enabled=False,  # Disable in tests
     )
 else:
     limiter = Limiter(

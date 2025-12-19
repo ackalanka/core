@@ -3,6 +3,7 @@
 Knowledge Base Service for supplement retrieval.
 Uses PostgreSQL with pgvector for semantic RAG search.
 """
+
 import json
 import logging
 import re

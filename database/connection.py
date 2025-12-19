@@ -3,6 +3,7 @@
 Database connection and session management for CardioVoice Backend.
 Uses SQLAlchemy 2.0 with PostgreSQL.
 """
+
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -34,9 +35,11 @@ engine = create_engine(
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 # Base class for all models
 class Base(DeclarativeBase):
     """SQLAlchemy 2.0 Declarative Base"""
+
     pass
 
 

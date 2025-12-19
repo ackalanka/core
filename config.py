@@ -3,6 +3,7 @@
 Centralized configuration module for CardioVoice Backend.
 Uses Pydantic Settings for validation and type safety.
 """
+
 import os
 from functools import lru_cache
 

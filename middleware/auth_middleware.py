@@ -2,6 +2,7 @@
 """
 JWT Authentication middleware for protected routes.
 """
+
 import logging
 from functools import wraps
 from typing import Any

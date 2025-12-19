@@ -38,6 +38,7 @@ jobs:
       - name: Run MyPy (Type Checking)
         run: mypy app.py config.py services/ middleware/ --ignore-missing-imports
 
+
   # ===================================================
   # 2. SECURITY SCANNING (CODE)
   # ===================================================

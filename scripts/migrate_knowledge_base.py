@@ -5,6 +5,7 @@ Migration script to transfer knowledge_base.json data to PostgreSQL database.
 Run this script after setting up the database:
     python scripts/migrate_knowledge_base.py
 """
+
 import json
 import os
 import sys

@@ -3,6 +3,7 @@
 Embedding service for generating vector embeddings from text.
 Uses sentence-transformers with multilingual model for Russian support.
 """
+
 import logging
 
 import numpy as np

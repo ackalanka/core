@@ -5,6 +5,7 @@ Script to generate embeddings for all supplements in the database.
 Run this after migrating knowledge base data:
     python scripts/generate_embeddings.py
 """
+
 import os
 import sys
 

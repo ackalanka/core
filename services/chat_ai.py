@@ -8,8 +8,6 @@ logger = logging.getLogger(__name__)
 
 # optional import — your original code used a gigachat client
 try:
-    from gigachat import GigaChat
-    from gigachat.models import Chat, Messages, MessagesRole
 
     GIGACHAT_AVAILABLE = True
 except Exception:
@@ -43,6 +41,7 @@ class CardioChatService:
                 "специфические нутриенты.'"
             )
             instruction_tone = "Будь краток, так как данных о нутриентах нет."
+        else:
             instruction_tone = (
                 "Используй ТОЛЬКО данные из списка ниже. "
                 "Не выдумывай несуществующие препараты."
@@ -56,39 +55,26 @@ class CardioChatService:
                     f"(Меры предосторожности: {warnings})\n"
                 )
             supp_text += "--- КОНЕЦ СПИСКА ---"
-        else:
-             # Logic for when supplements_data exists was missing or implicit in original code structure?
-             # Ah, looking at original code, 'supp_text' block initialization was inside the `if not` block?
-             # Wait, the original code had:
-             # if not supplements_data: ...
-             # prompt = ... {supp_text}
-             # But supp_text wasn't defined if supplements_data WAS present?
-             # Let me check the original file content again carefully.
-             # Ah, lines 50-58 were indented inside `if not supplements_data`... wait.
-             # No, lines 39: `if not supplements_data:`
-             # Lines 50: `supp_text = "..."` -> This looks like it was overwriting the previous assignment?
-             # The original code looks broken or I misread indentation.
-             # Let's look at lines 39-58 in original.
-             pass
 
-        # Re-reading original file content from Step 110:
-        # 39: if not supplements_data:
-        # 40:    supp_text = (...)
-        # ...
-        # 46:    instruction_tone = (...)
-        # 47:    instruction_tone = (...)  <-- Overwrites itself immediately?
-        # 50:    supp_text = "..."         <-- Overwrites supp_text immediately?
-        # 51:    for name, data in supplements_data.items(): ... <-- Iterates over empty dict if in `if not` block?
-        #
-        # Accessing `supplements_data.items()` inside `if not supplements_data` makes no sense if it's empty.
-        # It seems the previous code had a logic bug or the indentation viewed is misleading.
-        # But `supplements_data` is a dict. `if not` means empty.
-        # I will fix this logic bug too while I am here.
-        # Actually, let's just fix the Type Hint first to allow CI to pass, I don't want to change logic unless sure.
-        # The key error was `Argument "key" to "max"`.
-
-        # I will strictly apply the type fix requested.
-        pass
+        prompt = (
+            f"Роль: Ты профессиональный, но эмпатичный AI-коуч 'CardioVoice'.\n"
+            f"Задача: Интерпретировать риск-профиль и дать рекомендации.\n\n"
+            f"ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ:\n"
+            f"- Возраст: {user_profile.get('age')} лет\n"
+            f"- Пол: {user_profile.get('gender')}\n"
+            f"- Курение: {user_profile.get('smoking_status')}\n"
+            f"- Активность: {user_profile.get('activity_level')}\n"
+            f"- ВЫЯВЛЕННЫЙ РИСК: {main_focus}\n\n"
+            f"ИНСТРУКЦИИ:\n"
+            f"1. Дай ОДНУ конкретную, выполнимую рекомендацию по образу жизни "
+            f"(персонализированную под возраст и активность).\n"
+            f"2. {instruction_tone} Если список ниже не пуст, выбери 2-3 "
+            f"наиболее подходящих пунктов и кратко опиши их пользу.\n\n"
+            f"{supp_text}\n\n"
+            f"ВАЖНО: Закончи ответ фразой: 'Данная информация носит "
+            f"ознакомительный характер и не заменяет консультацию врача.'"
+        )
+        return prompt
 
     def generate_explanation(
         self,
@@ -101,7 +87,9 @@ class CardioChatService:
         """
         if self.mock_mode:
             # deterministic fallback that looks plausible
-            main_focus = max(scores, key=lambda k: scores[k]) if scores else "общий риск"
+            main_focus = (
+                max(scores, key=lambda k: scores[k]) if scores else "общий риск"
+            )
             return (
                 f"Краткий вывод: обнаружен повышенный риск — {main_focus}. "
                 "Рекомендация: увеличить физическую активность, сократить "
