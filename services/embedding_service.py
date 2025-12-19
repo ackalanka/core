@@ -53,8 +53,10 @@ class EmbeddingService:
         if not text or not text.strip():
             return [0.0] * EMBEDDING_DIMENSION
 
+        from typing import cast
+
         embedding = self.model.encode(text, convert_to_numpy=True)
-        return embedding.tolist()
+        return cast(list[float], embedding.tolist())
 
     def generate_embeddings_batch(
         self, texts: list[str], batch_size: int = 32, show_progress: bool = True

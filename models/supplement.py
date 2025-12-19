@@ -74,7 +74,7 @@ class Supplement(Base):
     )
     keywords = Column(
         ARRAY(String), nullable=True, comment="Search keywords for retrieval"
-    )
+    )  # type: ignore
     warnings = Column(Text, nullable=True, comment="Precautions and warnings")
     # Vector embedding for semantic search (RAG)
     embedding = Column(
@@ -115,7 +115,10 @@ class Supplement(Base):
         if self.mechanism:
             parts.append(self.mechanism)
         if self.keywords:
-            parts.append(" ".join(self.keywords))
+            from typing import cast
+
+            keywords_list = cast(list[str], self.keywords)
+            parts.append(" ".join(keywords_list))
         return " ".join(parts)
 
     def to_dict(self) -> dict:

@@ -103,7 +103,9 @@ class KnowledgeBaseService:
             with open(self.filepath, encoding="utf-8") as f:
                 data = json.load(f)
             logger.info(f"Knowledge Base loaded from JSON: {len(data)} categories.")
-            return data
+            from typing import cast
+
+            return cast(list[dict[str, Any]], data)
         except Exception as e:
             logger.critical(f"Could not load knowledge base '{self.filepath}': {e}")
             return []
@@ -180,7 +182,7 @@ class KnowledgeBaseService:
                     .all()
                 )
 
-                scored = []
+                scored: list[dict[str, Any]] = []
                 for supp in supplements:
                     # Vector similarity score (0-1)
                     vector_distance = supp.embedding.cosine_distance(query_embedding)
@@ -220,10 +222,10 @@ class KnowledgeBaseService:
                         )
 
                 # Sort by combined score
-                scored.sort(key=lambda x: x["score"], reverse=True)
+                scored.sort(key=lambda x: float(x["score"]), reverse=True)
                 top = scored[:top_k]
 
-                result = {}
+                result: dict[str, Any] = {}
                 for item in top:
                     if item["name"] not in result:
                         result[item["name"]] = item["data"]
@@ -253,7 +255,7 @@ class KnowledgeBaseService:
             with get_db_session() as db:
                 supplements = db.query(Supplement).join(Condition).all()
 
-                scored = []
+                scored: list[dict[str, Any]] = []
                 for supp in supplements:
                     name = (supp.name or "").lower()
                     mechanism = (supp.mechanism or "").lower()
@@ -278,13 +280,13 @@ class KnowledgeBaseService:
                             {"name": supp.name, "score": score, "data": supp.to_dict()}
                         )
 
-                scored.sort(key=lambda x: x["score"], reverse=True)
+                scored.sort(key=lambda x: float(str(x["score"])), reverse=True)
                 top = scored[:top_k]
 
-                result = {}
+                result: dict[str, Any] = {}
                 for item in top:
                     if item["name"] not in result:
-                        result[item["name"]] = item["data"]
+                        result[str(item["name"])] = item["data"]
 
                 logger.info(f"KB Keyword Retrieval: returning {len(result)} items")
                 return result

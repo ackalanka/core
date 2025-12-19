@@ -32,7 +32,9 @@ CONDITION_NAMES = {
 def load_knowledge_base(filepath: str = "knowledge_base.json") -> list:
     """Load knowledge base from JSON file."""
     with open(filepath, encoding="utf-8") as f:
-        return json.load(f)
+        from typing import cast
+
+        return cast(list, json.load(f))
 
 
 def migrate_data():

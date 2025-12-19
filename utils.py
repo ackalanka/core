@@ -43,7 +43,7 @@ def validate_file_size(file_obj, max_size_bytes: int) -> bool:
     # Reset file pointer to beginning
     file_obj.seek(0)
 
-    return file_size <= max_size_bytes
+    return bool(file_size <= max_size_bytes)
 
 
 def validate_content_type(file_obj) -> bool:
@@ -59,7 +59,7 @@ def validate_content_type(file_obj) -> bool:
     content_type = file_obj.content_type
     if not content_type:
         return False
-    return content_type.lower() in ALLOWED_MIME_TYPES
+    return bool(content_type.lower() in ALLOWED_MIME_TYPES)
 
 
 def save_upload_securely(

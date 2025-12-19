@@ -8,9 +8,15 @@ logger = logging.getLogger(__name__)
 
 # optional import — your original code used a gigachat client
 try:
+    from gigachat import GigaChat
+    from gigachat.models import Chat, Messages, MessagesRole
 
     GIGACHAT_AVAILABLE = True
-except Exception:
+except ImportError:
+    GigaChat = None  # type: ignore
+    Chat = None  # type: ignore
+    Messages = None  # type: ignore
+    MessagesRole = None  # type: ignore
     GIGACHAT_AVAILABLE = False
 
 
@@ -75,6 +81,31 @@ class CardioChatService:
             f"ознакомительный характер и не заменяет консультацию врача.'"
         )
         return prompt
+
+    def _call_gigachat(self, prompt: str, temperature: float = 0.2) -> str:
+        """
+        Calls the gigachat client. This function is executed inside a ThreadPoolExecutor
+        so the outer code can enforce a timeout.
+        """
+        if not GIGACHAT_AVAILABLE:
+            raise RuntimeError("GigaChat client not available in environment.")
+
+        # Import settings here to avoid circular imports
+        from config import settings
+
+        # Use SSL verification from config (default: True for production safety)
+        giga = GigaChat(
+            credentials=self.auth_key,
+            scope="GIGACHAT_API_PERS",
+            verify_ssl_certs=settings.verify_ssl,
+        )
+        payload = Chat(
+            messages=[Messages(role=MessagesRole.USER, content=prompt)],
+            temperature=temperature,
+        )
+        response = giga.chat(payload)
+        # Original code used response.choices[0].message.content
+        return getattr(response.choices[0].message, "content", str(response))
 
     def generate_explanation(
         self,

@@ -54,7 +54,9 @@ class AuthService:
             True if password matches, False otherwise
         """
         try:
-            return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+            return bool(
+                bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+            )
         except Exception as e:
             logger.error(f"Password verification error: {e}")
             return False
@@ -86,7 +88,7 @@ class AuthService:
         )
 
         logger.info(f"Created access token for user: {email}")
-        return token
+        return str(token)
 
     def register_user(
         self, email: str, password: str
@@ -159,7 +161,9 @@ class AuthService:
                     return False, "Account is disabled", None
 
                 # Verify password
-                if not self.verify_password(password, user.password_hash):
+                from typing import cast
+
+                if not self.verify_password(password, cast(str, user.password_hash)):
                     logger.warning(f"Failed login attempt for: {email}")
                     return False, "Invalid email or password", None
 

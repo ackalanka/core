@@ -40,7 +40,9 @@ def decode_token(token: str) -> dict[str, Any] | None:
         payload = jwt.decode(
             token, settings.secret_key, algorithms=[settings.jwt_algorithm]
         )
-        return payload
+        from typing import cast
+
+        return cast(dict[str, Any], payload)
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired")
         return None
