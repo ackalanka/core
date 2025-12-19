@@ -137,5 +137,3 @@ client/
 *.log
 client_logs.txt
 nginx_logs.txt
-
-.agent/
