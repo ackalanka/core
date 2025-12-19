@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Set test environment before importing app
 # Set test environment before importing app
 os.environ.setdefault("FLASK_ENV", "testing")
-os.environ.setdefault("SECRET_KEY", "test-secret-key-12345678")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-12345678")  # gitleaks:allow
 os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("DB_NAME", "cardiovoice")  # Default to main if not set
 

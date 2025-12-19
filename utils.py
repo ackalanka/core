@@ -62,7 +62,7 @@ def validate_content_type(file_obj) -> bool:
     return content_type.lower() in ALLOWED_MIME_TYPES
 
 
-def save_upload_securely(file_obj, upload_folder: str, max_size_bytes: int = None):
+def save_upload_securely(file_obj, upload_folder: str, max_size_bytes: int | None = None):
     """
     Saves a file with a unique UUID name to prevent overwrites.
 

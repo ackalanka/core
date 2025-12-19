@@ -45,7 +45,8 @@ class User(Base):
     def __repr__(self) -> str:
         return f"<User {self.email}>"
 
-    def to_dict(self) -> dict:
+    from typing import Any
+    def to_dict(self) -> dict[str, Any]:
         """Convert user to dictionary (safe, no password)."""
         return {
             "id": str(self.id),

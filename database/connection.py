@@ -8,7 +8,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from config import settings
@@ -35,7 +35,9 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for all models
-Base = declarative_base()
+class Base(DeclarativeBase):
+    """SQLAlchemy 2.0 Declarative Base"""
+    pass
 
 
 def get_db() -> Generator[Session, None, None]:

@@ -11,7 +11,7 @@ class MockMLService:
     Interface preserved from previous implementation.
     """
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: int | None = None):
         if seed is not None:
             random.seed(seed)
 
@@ -34,7 +34,7 @@ class MockMLService:
             ),
         }
 
-        highest_risk = max(scores, key=scores.get)
+        highest_risk = max(scores, key=lambda k: scores[k])
         query_map = {
             "АГ (Гипертензия)": "давление сосуды",
             "СД2 (Диабет)": "сахар инсулин",
