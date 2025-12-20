@@ -1,0 +1,63 @@
+# ============================================
+# CardioVoice - Deployment Compose File
+# ============================================
+# For deploying on a new machine using pre-built images from GitHub Container Registry.
+# Usage: docker-compose -f docker-compose.deploy.yml up -d
+#
+# NOTE: Replace 'ghcr.io/YOUR_USERNAME' with the actual registry path (e.g., ghcr.io/akalanka/cardiovoice-backend)
+services:
+  # --------------------------
+  # PostgreSQL Database
+  # --------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cardiovoice-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-cardiovoice}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cardiovoice_secret}
+      POSTGRES_DB: ${DB_NAME:-cardiovoice}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize pgvector extension
+      - ./init_vector.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-cardiovoice}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cardiovoice-network
+  # --------------------------
+  # CardioVoice API
+  # --------------------------
+  api:
+    # REPLACE THIS with your actual image path from the CI build
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/cardiovoice-backend:latest
+    container_name: cardiovoice-api
+    restart: unless-stopped
+    ports:
+      - "5010:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_prod}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-cardiovoice}
+      - DB_PASSWORD=${DB_PASSWORD:-cardiovoice_secret}
+      - DB_NAME=${DB_NAME:-cardiovoice}
+      - GIGACHAT_AUTH_KEY=${GIGACHAT_AUTH_KEY}
+      - RATE_LIMIT_PER_MINUTE=100
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/temp_uploads
+    networks:
+      - cardiovoice-network
+volumes:
+  postgres_data:
+  uploads_data:
+networks:
+  cardiovoice-network:
+    driver: bridge
