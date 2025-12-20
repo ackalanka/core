@@ -7,17 +7,16 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add the project root to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our models and database connection
-from database.connection import Base
-from models import RefreshToken, User  # Import all models for autogenerate
 from config import settings
+from database.connection import Base
+from models import RefreshToken, User  # noqa: F401
 
 # This is the Alembic Config object
 config = context.config

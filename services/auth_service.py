@@ -149,7 +149,7 @@ class AuthService:
 
     def verify_refresh_token(
         self, raw_token: str
-    ) -> tuple[bool, str, RefreshToken | None]:
+    ) -> tuple[bool, str, dict[str, Any] | None]:
         """
         Verify a refresh token and check if it's valid.
 
@@ -192,7 +192,15 @@ class AuthService:
                 if not user or not user.is_active:
                     return False, "User account is disabled", None
 
-                return True, "Token is valid", refresh_token
+                # Return DTO (dict) instead of ORM object to avoid detached instance errors
+                token_data = {
+                    "id": refresh_token.id,
+                    "user_id": refresh_token.user_id,
+                    "family_id": refresh_token.family_id,
+                    "revoked": refresh_token.revoked,
+                    "expires_at": refresh_token.expires_at,
+                }
+                return True, "Token is valid", token_data
 
         except Exception as e:
             logger.error(f"Error verifying refresh token: {e}")
@@ -228,7 +236,7 @@ class AuthService:
                 # Re-fetch the token within this session
                 token_to_revoke = (
                     db.query(RefreshToken)
-                    .filter(RefreshToken.id == old_refresh_token.id)
+                    .filter(RefreshToken.id == old_refresh_token["id"])
                     .first()
                 )
 
@@ -238,13 +246,14 @@ class AuthService:
                     token_to_revoke.revoked_at = datetime.now(UTC)  # type: ignore[assignment]
 
                 # Get user info for access token
-                user = db.query(User).filter(User.id == token_to_revoke.user_id).first()
+                user_id = str(old_refresh_token["user_id"])
+                family_id = str(old_refresh_token["family_id"])
+
+                user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
                 if not user:
                     return False, "User not found", None
 
-                user_id = str(user.id)
                 email = str(user.email)
-                family_id = str(token_to_revoke.family_id)
 
             # Create new token pair (outside the session to avoid nesting)
             new_refresh_token_raw, new_refresh_token_obj = self.create_refresh_token(
