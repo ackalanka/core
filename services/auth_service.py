@@ -239,14 +239,14 @@ class AuthService:
 
                 # Get user info for access token
                 user = (
-                    db.query(User).filter(User.id == old_refresh_token.user_id).first()
+                    db.query(User).filter(User.id == token_to_revoke.user_id).first()
                 )
                 if not user:
                     return False, "User not found", None
 
                 user_id = str(user.id)
                 email = str(user.email)
-                family_id = str(old_refresh_token.family_id)
+                family_id = str(token_to_revoke.family_id)
 
             # Create new token pair (outside the session to avoid nesting)
             new_refresh_token_raw, new_refresh_token_obj = self.create_refresh_token(
