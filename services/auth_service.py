@@ -238,9 +238,7 @@ class AuthService:
                     token_to_revoke.revoked_at = datetime.now(UTC)  # type: ignore[assignment]
 
                 # Get user info for access token
-                user = (
-                    db.query(User).filter(User.id == token_to_revoke.user_id).first()
-                )
+                user = db.query(User).filter(User.id == token_to_revoke.user_id).first()
                 if not user:
                     return False, "User not found", None
 

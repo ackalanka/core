@@ -1,7 +1,7 @@
 """Add refresh_tokens table
 
 Revision ID: fd3df9809f73
-Revises: 
+Revises:
 Create Date: 2025-12-20 12:39:54.470456
 
 """
