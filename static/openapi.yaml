@@ -1,16 +1,228 @@
 openapi: 3.0.3
 info:
   title: CardioVoice API
-  version: "0.1.0"
-  description: >
-    CardioVoice backend API - analyze audio + profile to return risk scores and an AI explanation.
+  version: "1.0.0"
+  description: |
+    CardioVoice Backend API - Health risk assessment using voice analysis and AI-powered recommendations.
+    
+    ## Authentication
+    This API uses JWT Bearer token authentication. To access protected endpoints:
+    1. Register a new account via `/api/v1/auth/register`
+    2. Login via `/api/v1/auth/login` to receive an access token
+    3. Include the token in the `Authorization` header: `Bearer <token>`
+    
+    ## Response Format
+    All responses follow a consistent format:
+    - **Success**: `{ "status": "success", "data": {...} }`
+    - **Error**: `{ "status": "error", "message": "...", "code": "..." }`
+  contact:
+    name: CardioVoice Team
+  license:
+    name: MIT
+
 servers:
   - url: http://localhost:5000
+    description: Development server
+  - url: https://api.cardiovoice.com
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User registration, login, and profile management
+  - name: Analysis
+    description: Voice analysis and health risk assessment
+  - name: Health
+    description: Service health checks
+
 paths:
+  # ============================================
+  # AUTHENTICATION ENDPOINTS
+  # ============================================
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account and receive an access token immediately.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+            example:
+              email: "user@example.com"
+              password: "SecurePass123"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                status: success
+                message: Registration successful
+                data:
+                  access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  token_type: bearer
+                  expires_in: 86400
+                  user:
+                    id: "b3428e61-b82a-41a0-a084-5b18af6e472b"
+                    email: "user@example.com"
+                    created_at: "2025-12-20T10:00:00Z"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_email:
+                  summary: Invalid email format
+                  value:
+                    status: error
+                    message: "Invalid email format"
+                    code: "VALIDATION_ERROR"
+                weak_password:
+                  summary: Password too weak
+                  value:
+                    status: error
+                    message: "Password must be at least 8 characters"
+                    code: "VALIDATION_ERROR"
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "Email already registered"
+                code: "EMAIL_EXISTS"
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: |
+        Authenticate a user and receive an access token.
+        
+        **Rate Limit**: 5 requests per minute (brute-force protection)
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+            example:
+              email: "user@example.com"
+              password: "SecurePass123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                status: success
+                message: Login successful
+                data:
+                  access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  token_type: bearer
+                  expires_in: 86400
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "Invalid email or password"
+                code: "AUTH_FAILED"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "Rate limit exceeded. Try again later."
+                code: "RATE_LIMIT"
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Retrieve the authenticated user's profile information.
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: '#/components/schemas/User'
+              example:
+                status: success
+                data:
+                  id: "b3428e61-b82a-41a0-a084-5b18af6e472b"
+                  email: "user@example.com"
+                  is_active: true
+                  created_at: "2025-12-20T10:00:00Z"
+                  updated_at: "2025-12-20T10:00:00Z"
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_token:
+                  summary: No token provided
+                  value:
+                    status: error
+                    message: "Authentication required. Please provide a valid token."
+                    code: "AUTH_REQUIRED"
+                invalid_token:
+                  summary: Invalid or expired token
+                  value:
+                    status: error
+                    message: "Invalid or expired token. Please login again."
+                    code: "INVALID_TOKEN"
+
+  # ============================================
+  # ANALYSIS ENDPOINTS
+  # ============================================
   /api/v1/analyze:
     post:
-      summary: Analyze voice + profile -> risk scores + AI explanation
-      operationId: analyze
+      tags:
+        - Analysis
+      summary: Analyze voice recording
+      description: |
+        Submit a voice recording along with user profile data to receive:
+        - Cardiovascular risk scores (Hypertension, Diabetes, Heart Disease)
+        - AI-generated health recommendations in Russian
+        
+        **Requires authentication**
+      operationId: analyzeVoice
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -27,91 +239,208 @@ paths:
                 age:
                   type: integer
                   format: int32
+                  minimum: 18
+                  maximum: 100
                   example: 45
                   description: "Age in years (18-100)"
                 gender:
                   type: string
+                  enum: [male, female]
                   example: "male"
-                  description: "male | female"
+                  description: "Biological gender"
                 smoking_status:
                   type: string
-                  example: "smoker"
-                  description: "smoker | non-smoker"
+                  enum: [smoker, non-smoker]
+                  example: "non-smoker"
+                  description: "Current smoking status"
                 activity_level:
                   type: string
-                  example: "sedentary"
-                  description: "sedentary | moderate | active"
+                  enum: [sedentary, moderate, active]
+                  example: "moderate"
+                  description: "Physical activity level"
                 audio:
                   type: string
                   format: binary
-                  description: "User voice recording file (.wav, .mp3, .m4a, .ogg)"
+                  description: "Voice recording file (.wav, .mp3, .m4a, .ogg). Max 10MB."
       responses:
         '200':
-          description: Successful analysis
+          description: Analysis completed successfully
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: success
-                  data:
-                    type: object
-                    properties:
-                      risk_scores:
-                        type: object
-                        description: "Risk scores returned by mock/real ML model"
-                        additionalProperties:
-                          type: number
-                          format: float
-                        example:
-                          "АГ (Гипертензия)": 0.45
-                          "СД2 (Диабет)": 0.12
-                          "ИБС (Сердце)": 0.30
-                      ai_explanation:
-                        type: string
-                        description: "Russian text explanation generated by the CardioChat LLM"
-                        example: "Краткий вывод: повышенный риск ... Данная информация носит ознакомительный характер..."
+                $ref: '#/components/schemas/AnalysisResponse'
+              example:
+                status: success
+                data:
+                  risk_scores:
+                    "АГ (Гипертензия)": 0.45
+                    "СД2 (Диабет)": 0.21
+                    "ИБС (Сердце)": 0.73
+                  ai_explanation: "Рекомендация: Для поддержания работы сердца рекомендуется регулярно принимать L-карнитин... Данная информация носит ознакомительный характер и не заменяет консультацию врача."
         '400':
-          description: Bad request (validation error)
+          description: Validation error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
-                missing_field:
-                  summary: Missing audio
+                missing_audio:
+                  summary: Audio file missing
                   value:
                     status: error
                     message: "Audio file missing"
+                    code: "VALIDATION_ERROR"
+                invalid_format:
+                  summary: Invalid audio format
+                  value:
+                    status: error
+                    message: "Unsupported audio format. Use .wav, .mp3, .m4a, or .ogg"
+                    code: "INVALID_FORMAT"
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                message: "File size exceeds 10MB limit"
+                code: "FILE_TOO_LARGE"
         '500':
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  # HEALTH CHECK
+  # ============================================
   /health:
     get:
+      tags:
+        - Health
       summary: Health check
-      description: Returns service status and mode (mock/real)
+      description: Returns service status, mode (mock/real), and version.
+      operationId: healthCheck
       responses:
         '200':
-          description: OK
+          description: Service is healthy
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  mode:
-                    type: string
-                    example: mock
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                mode: real
+                version: "1.0.0"
 
+# ============================================
+# COMPONENTS
+# ============================================
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT authentication. Obtain a token via `/api/v1/auth/login`.
+        
+        Include in header: `Authorization: Bearer <token>`
+
   schemas:
+    # ---- Authentication ----
+    UserRegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 5
+          maxLength: 255
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: "Must contain at least one letter and one digit"
+          example: "SecurePass123"
+
+    UserLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "SecurePass123"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "b3428e61-b82a-41a0-a084-5b18af6e472b"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-20T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-12-20T10:00:00Z"
+
+    AuthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: "Login successful"
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+              description: JWT access token
+            token_type:
+              type: string
+              example: bearer
+            expires_in:
+              type: integer
+              description: Token lifetime in seconds
+              example: 86400
+            user:
+              $ref: '#/components/schemas/User'
+
+    # ---- Analysis ----
     Profile:
       type: object
       required:
@@ -123,6 +452,8 @@ components:
         age:
           type: integer
           format: int32
+          minimum: 18
+          maximum: 100
         gender:
           type: string
           enum: [male, female]
@@ -132,6 +463,48 @@ components:
         activity_level:
           type: string
           enum: [sedentary, moderate, active]
+
+    AnalysisResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            risk_scores:
+              type: object
+              description: "Risk scores from ML model (0.0 to 1.0)"
+              additionalProperties:
+                type: number
+                format: float
+              example:
+                "АГ (Гипертензия)": 0.45
+                "СД2 (Диабет)": 0.21
+                "ИБС (Сердце)": 0.73
+            ai_explanation:
+              type: string
+              description: "AI-generated health recommendations in Russian"
+              example: "Рекомендация: Для поддержания работы сердца..."
+
+    # ---- Health ----
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        mode:
+          type: string
+          enum: [mock, real]
+          example: real
+          description: "Whether GigaChat is active (real) or fallback (mock)"
+        version:
+          type: string
+          example: "1.0.0"
+
+    # ---- Errors ----
     ErrorResponse:
       type: object
       properties:
@@ -140,9 +513,13 @@ components:
           example: error
         message:
           type: string
-          example: "Invalid profile data"
+          example: "Invalid request"
+        code:
+          type: string
+          description: "Error code for client handling"
+          example: "VALIDATION_ERROR"
         errors:
           type: array
           items:
             type: object
-            description: "Validation error objects (optional, from Pydantic)"
+            description: "Detailed validation errors (Pydantic format)"
