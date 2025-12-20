@@ -41,10 +41,18 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=100, description="Global rate limit")
     verify_ssl: bool = Field(default=True, description="Verify SSL certificates")
 
-    # JWT Settings
+    # JWT Settings - Access Token
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
+    jwt_access_expiration_minutes: int = Field(
+        default=15, description="Access token expiration in minutes"
+    )
+    # JWT Settings - Refresh Token
+    jwt_refresh_expiration_days: int = Field(
+        default=7, description="Refresh token expiration in days"
+    )
+    # Legacy setting (deprecated, use jwt_access_expiration_minutes)
     jwt_expiration_hours: int = Field(
-        default=24, description="JWT token expiration in hours"
+        default=24, description="Legacy JWT token expiration in hours (deprecated)"
     )
 
     # Database Settings

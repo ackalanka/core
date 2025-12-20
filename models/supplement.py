@@ -111,12 +111,12 @@ class Supplement(Base):
         Get text representation for embedding generation.
         Combines name, mechanism, and keywords for richer context.
         """
-        parts = [self.name]
-        if self.mechanism:
-            parts.append(self.mechanism)
-        if self.keywords:
-            from typing import cast
+        from typing import cast
 
+        parts: list[str] = [cast(str, self.name)]
+        if self.mechanism:
+            parts.append(cast(str, self.mechanism))
+        if self.keywords:
             keywords_list = cast(list[str], self.keywords)
             parts.append(" ".join(keywords_list))
         return " ".join(parts)

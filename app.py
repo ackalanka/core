@@ -229,7 +229,7 @@ def register():
     """
     Register a new user.
 
-    Returns JWT token on successful registration.
+    Returns JWT access token and refresh token on successful registration.
     """
     try:
         data = request.get_json()
@@ -248,9 +248,16 @@ def register():
         # Validate input
         user_data = UserRegisterModel(**data)
 
-        # Register user
-        success, message, user = auth_service.register_user(
-            email=user_data.email, password=user_data.password
+        # Get client info for token tracking
+        user_agent = request.headers.get("User-Agent")
+        ip_address = request.remote_addr
+
+        # Register user (now returns both tokens)
+        success, message, result = auth_service.register_user(
+            email=user_data.email,
+            password=user_data.password,
+            user_agent=user_agent,
+            ip_address=ip_address,
         )
 
         if not success:
@@ -265,22 +272,14 @@ def register():
                 400,
             )
 
-        # Generate token for immediate login
-        token = auth_service.create_access_token(user["id"], user["email"])
-
-        logger.info(f"New user registered: {user['email']}")
+        logger.info(f"New user registered: {user_data.email}")
 
         return (
             jsonify(
                 {
                     "status": "success",
                     "message": "Registration successful",
-                    "data": {
-                        "user": user,
-                        "access_token": token,
-                        "token_type": "bearer",
-                        "expires_in": settings.jwt_expiration_hours * 3600,
-                    },
+                    "data": result,  # Contains access_token, refresh_token, user
                 }
             ),
             201,
@@ -326,7 +325,7 @@ def register():
 @limiter.limit("5 per minute")  # Brute force protection
 def login():
     """
-    Authenticate user and return JWT token.
+    Authenticate user and return JWT access token + refresh token.
     """
     try:
         data = request.get_json()
@@ -345,9 +344,16 @@ def login():
         # Validate input
         login_data = UserLoginModel(**data)
 
-        # Authenticate
-        success, message, token = auth_service.authenticate(
-            email=login_data.email, password=login_data.password
+        # Get client info for token tracking
+        user_agent = request.headers.get("User-Agent")
+        ip_address = request.remote_addr
+
+        # Authenticate (now returns both tokens)
+        success, message, result = auth_service.authenticate(
+            email=login_data.email,
+            password=login_data.password,
+            user_agent=user_agent,
+            ip_address=ip_address,
         )
 
         if not success:
@@ -360,11 +366,7 @@ def login():
             {
                 "status": "success",
                 "message": "Login successful",
-                "data": {
-                    "access_token": token,
-                    "token_type": "bearer",
-                    "expires_in": settings.jwt_expiration_hours * 3600,
-                },
+                "data": result,  # Contains access_token, refresh_token, etc.
             }
         )
 
@@ -413,6 +415,176 @@ def get_me():
         )
 
     return jsonify({"status": "success", "data": user_data})
+
+
+@app.route("/api/v1/auth/refresh", methods=["POST"])
+@limiter.limit("10 per minute")  # Reasonable limit for token refresh
+def refresh_token():
+    """
+    Refresh access token using a valid refresh token.
+
+    Implements token rotation: old refresh token is invalidated,
+    new access + refresh tokens are returned.
+    """
+    try:
+        data = request.get_json()
+        if not data or "refresh_token" not in data:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "refresh_token is required",
+                        "code": "INVALID_REQUEST",
+                    }
+                ),
+                400,
+            )
+
+        # Get client info for token tracking
+        user_agent = request.headers.get("User-Agent")
+        ip_address = request.remote_addr
+
+        # Rotate the refresh token
+        success, message, result = auth_service.rotate_refresh_token(
+            old_token=data["refresh_token"],
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+        if not success:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": message,
+                        "code": "REFRESH_FAILED",
+                    }
+                ),
+                401,
+            )
+
+        return jsonify(
+            {
+                "status": "success",
+                "message": "Token refreshed successfully",
+                "data": result,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Token refresh failed",
+                    "code": "INTERNAL_ERROR",
+                }
+            ),
+            500,
+        )
+
+
+@app.route("/api/v1/auth/logout", methods=["POST"])
+def logout():
+    """
+    Logout from current device by revoking the refresh token.
+
+    Revokes only the provided refresh token (single device logout).
+    """
+    try:
+        data = request.get_json()
+        if not data or "refresh_token" not in data:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "refresh_token is required",
+                        "code": "INVALID_REQUEST",
+                    }
+                ),
+                400,
+            )
+
+        success, message = auth_service.revoke_refresh_token(data["refresh_token"])
+
+        if not success:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": message,
+                        "code": "LOGOUT_FAILED",
+                    }
+                ),
+                400,
+            )
+
+        return jsonify(
+            {
+                "status": "success",
+                "message": "Logged out successfully",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Logout failed",
+                    "code": "INTERNAL_ERROR",
+                }
+            ),
+            500,
+        )
+
+
+@app.route("/api/v1/auth/logout-all", methods=["POST"])
+@require_auth
+def logout_all():
+    """
+    Logout from all devices by revoking all refresh tokens.
+
+    Requires authentication. Revokes all refresh tokens for the current user.
+    """
+    try:
+        user = get_current_user()
+        success, message, count = auth_service.revoke_all_user_tokens(user["user_id"])
+
+        if not success:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": message,
+                        "code": "LOGOUT_FAILED",
+                    }
+                ),
+                400,
+            )
+
+        return jsonify(
+            {
+                "status": "success",
+                "message": f"Logged out from {count} device(s)",
+                "data": {"revoked_tokens": count},
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Logout-all error: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Logout failed",
+                    "code": "INTERNAL_ERROR",
+                }
+            ),
+            500,
+        )
 
 
 # =====================================================

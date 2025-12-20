@@ -206,6 +206,157 @@ paths:
                     message: "Invalid or expired token. Please login again."
                     code: "INVALID_TOKEN"
 
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Exchange a valid refresh token for a new access token and refresh token.
+        
+        **Token Rotation**: The old refresh token is immediately invalidated.
+        This is a security feature - each refresh token can only be used once.
+        
+        **Theft Detection**: If a revoked refresh token is used, all tokens 
+        in the same family are revoked (the attacker and legitimate user 
+        are both logged out).
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: The refresh token from login/register or previous refresh
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                status: success
+                message: "Token refreshed successfully"
+                data:
+                  access_token: "new_access_token_here"
+                  refresh_token: "new_refresh_token_here"
+                  token_type: bearer
+                  access_token_expires_in: 900
+                  refresh_token_expires_in: 604800
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                expired:
+                  summary: Token expired
+                  value:
+                    status: error
+                    message: "Refresh token has expired"
+                    code: "REFRESH_FAILED"
+                revoked:
+                  summary: Token revoked
+                  value:
+                    status: error
+                    message: "Token has been revoked. Please login again."
+                    code: "REFRESH_FAILED"
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout (single device)
+      description: |
+        Revoke a specific refresh token to logout from a single device.
+        
+        The access token will remain valid until it expires (15 minutes),
+        but the refresh token cannot be used to obtain new tokens.
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: The refresh token to revoke
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        '400':
+          description: Logout failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/logout-all:
+    post:
+      tags:
+        - Authentication
+      summary: Logout from all devices
+      description: |
+        Revoke all refresh tokens for the authenticated user.
+        
+        This effectively logs out the user from all devices.
+        **Requires authentication**.
+      operationId: logoutAll
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Logged out from all devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: "Logged out from 3 device(s)"
+                  data:
+                    type: object
+                    properties:
+                      revoked_tokens:
+                        type: integer
+                        example: 3
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ============================================
   # ANALYSIS ENDPOINTS
   # ============================================
@@ -429,16 +580,52 @@ components:
           properties:
             access_token:
               type: string
-              description: JWT access token
+              description: JWT access token (short-lived, 15 min)
+            refresh_token:
+              type: string
+              description: Refresh token (long-lived, 7 days)
             token_type:
               type: string
               example: bearer
-            expires_in:
+            access_token_expires_in:
               type: integer
-              description: Token lifetime in seconds
-              example: 86400
+              description: Access token lifetime in seconds
+              example: 900
+            refresh_token_expires_in:
+              type: integer
+              description: Refresh token lifetime in seconds
+              example: 604800
             user:
               $ref: '#/components/schemas/User'
+
+    TokenResponse:
+      type: object
+      description: Response from token refresh endpoint
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: "Token refreshed successfully"
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+              description: New JWT access token
+            refresh_token:
+              type: string
+              description: New refresh token (old one is invalidated)
+            token_type:
+              type: string
+              example: bearer
+            access_token_expires_in:
+              type: integer
+              example: 900
+            refresh_token_expires_in:
+              type: integer
+              example: 604800
 
     # ---- Analysis ----
     Profile:
